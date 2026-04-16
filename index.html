@@ -269,6 +269,11 @@ input[type=range]{width:100%;accent-color:var(--text)}
         <input type="hidden" id="selected-academy-id">
         <div id="selected-academy-name" style="font-size:12px;color:var(--green);margin-top:4px;font-weight:700"></div>
       </div>
+      <div class="fg"><label class="fl">이름 *</label><input type="text" id="s-name" placeholder="홍길동"></div>
+      <div class="fg"><label class="fl">연락처</label><input type="tel" id="s-phone" placeholder="010-0000-0000"></div>
+      <div class="fg"><label class="fl">레벨</label><select id="s-level"><option value="">선택</option><option>입문</option><option>초급</option><option>중급</option><option>중상급</option><option>고급</option></select></div>
+      <div class="fg"><label class="fl">학습목표</label><input type="text" id="s-goal" placeholder="비즈니스, 여행, 일상회화 등"></div>
+      <div class="fg"><label class="fl">특이사항</label><textarea id="s-notes" placeholder="알레르기, 선호도 등..."></textarea></div>
     </div>
 
     <div class="fg"><label class="fl">이메일</label>
@@ -299,6 +304,7 @@ input[type=range]{width:100%;accent-color:var(--text)}
     <div class="tab-item" onclick="showTab('progress',this)">진행도</div>
     <div class="tab-item" onclick="showTab('feedback',this)">피드백</div>
     <div class="tab-item" onclick="showTab('homework',this)">숙제</div>
+    <div class="tab-item" onclick="showTab('questions',this)">질문</div>
   </div>
   <div class="content">
     <div class="section on" id="sec-students">
@@ -331,6 +337,12 @@ input[type=range]{width:100%;accent-color:var(--text)}
       <div id="fb-list"></div>
       <div class="divider"></div>
       <div class="card" id="fb-form"></div>
+    </div>
+    <div class="section" id="sec-questions">
+      <div class="fg"><label class="fl">학생 선택</label><select id="q-sel" onchange="renderQuestions()"></select></div>
+      <div id="q-list"></div>
+      <div class="divider"></div>
+      <div class="card" id="q-teacher-reply"></div>
     </div>
     <div class="section" id="sec-homework">
       <div class="fg"><label class="fl">학생 선택</label><select id="hw-sel" onchange="renderHomework()"></select></div>
@@ -372,6 +384,7 @@ input[type=range]{width:100%;accent-color:var(--text)}
     <div class="tab-item" onclick="showStudentTab('my-progress',this)">진행도</div>
     <div class="tab-item" onclick="showStudentTab('my-feedback',this)">피드백</div>
     <div class="tab-item" onclick="showStudentTab('my-homework',this)">숙제</div>
+    <div class="tab-item" onclick="showStudentTab('my-questions',this)">질문</div>
   </div>
   <div class="content">
     <div class="section on" id="sec-my-info"></div>
@@ -386,6 +399,15 @@ input[type=range]{width:100%;accent-color:var(--text)}
     <div class="section" id="sec-my-progress"></div>
     <div class="section" id="sec-my-feedback"></div>
     <div class="section" id="sec-my-homework"></div>
+    <div class="section" id="sec-my-questions">
+      <div id="my-q-list"></div>
+      <div class="divider"></div>
+      <div class="card">
+        <div class="card-title">새 질문</div>
+        <div class="fg"><textarea id="my-q-text" placeholder="선생님께 질문을 남겨주세요..."></textarea></div>
+        <button class="btn btn-primary btn-full" onclick="submitQuestion()">질문 보내기</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -477,8 +499,14 @@ async function doAuth(){
       if(!aId){showErr('학원을 선택하세요');return}
       const {data,error}=await sb.auth.signUp({email,password:pw});
       if(error){showErr(error.message);return}
+      const sName = $('s-name')?.value.trim()||'';
+      const sPhone = $('s-phone')?.value.trim()||'';
+      const sLevel = $('s-level')?.value||'';
+      const sGoal = $('s-goal')?.value.trim()||'';
+      const sNotes = $('s-notes')?.value.trim()||'';
+      if(!sName){showErr('이름을 입력하세요');return}
       // 가입 신청
-      await sb.from('academy_members').insert({academy_id:aId,user_id:data.user.id,email,status:'pending'});
+      await sb.from('academy_members').insert({academy_id:aId,user_id:data.user.id,email,name:sName,phone:sPhone,level:sLevel,goal:sGoal,notes:sNotes,status:'pending',attendance:[],feedback:[],homework:[],progress:{}});
       enterApp(data.user);
     }
   }
@@ -578,7 +606,7 @@ async function saveMember(m){
 
 function populateSelects(){
   const approved=members.filter(m=>m.status==='approved');
-  ['att-sel','prog-sel','fb-sel','hw-sel'].forEach(id=>{
+  ['att-sel','prog-sel','fb-sel','hw-sel','q-sel'].forEach(id=>{
     const el=$(id);if(!el)return;
     const prev=el.value;
     el.innerHTML='<option value="">-- 선택 --</option>'+approved.map(m=>`<option value="${m.id}"${m.id===prev?' selected':''}>${m.name||m.email}</option>`).join('');
@@ -823,12 +851,13 @@ function renderFeedback(){
     <div class="fb-text">${f.text}</div></div>`).join('')+'</div>';
 }
 
-function selChip(el){document.querySelectorAll('#fb-chips .chip').forEach(c=>c.classList.remove('on'));el.classList.add('on')}
+function selChip(el){el.classList.toggle('on')}
 
 async function addFeedback(){
   const sid=$('fb-sel')?.value;if(!sid){toast('학생을 선택하세요');return}
   const text=$('fb-text').value.trim();if(!text){toast('내용을 입력하세요');return}
-  const cat=document.querySelector('#fb-chips .chip.on')?.textContent||'기타';
+  const cats=[...document.querySelectorAll('#fb-chips .chip.on')].map(c=>c.textContent);
+  const cat=cats.length?cats.join(', '):'기타';
   const m=members.find(x=>x.id===sid);
   if(!m.feedback)m.feedback=[];
   m.feedback.push({date:new Date().toLocaleDateString('ko-KR'),category:cat,text});
@@ -1000,16 +1029,28 @@ function renderMyFeedback(){
 
 function renderMyHomework(){
   const m=myMember;if(!m)return;
-  const hw=[...(m.homework||[])].reverse();
+  const hw=m.homework||[];
+  const hwRev=[...hw].reverse();
   const el=$('sec-my-homework');
-  if(!hw.length){el.innerHTML='<div class="empty-state">숙제가 없어요</div>';return}
-  el.innerHTML='<div class="card">'+hw.map(h=>{
+  if(!hwRev.length){el.innerHTML='<div class="empty-state">숙제가 없어요</div>';return}
+  el.innerHTML='<div class="card">'+hwRev.map((h,ri)=>{
+    const i=hw.length-1-ri;
     const tag=`<span class="hw-tag ${h.type==='common'?'tag-c':'tag-p'}">${h.type==='common'?'공통':'개별'}</span>`;
     return`<div class="hw-row">
-      <div class="hw-check ${h.done?'done':''}">${h.done?`<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#1A8A4A" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`:''}</div>
-      <div style="flex:1"><div class="hw-title ${h.done?'hw-done-text':''}">${h.title}${tag}</div>${h.due?`<div class="hw-due">마감 ${h.due}</div>`:''}</div>
+      <div class="hw-check ${h.done?'done':''}" onclick="toggleMyHW(${i})">${h.done?`<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#1A8A4A" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`:''}</div>
+      <div style="flex:1"><div class="hw-title ${h.done?'hw-done-text':''}">${h.title}${tag}</div>${h.due?`<div class="hw-due">마감 ${h.due}${h.done?' · 완료':''}</div>`:''}</div>
     </div>`;
   }).join('')+'</div>';
+}
+
+async function toggleMyHW(i){
+  if(!myMember||!myMember.homework[i])return;
+  myMember.homework[i].done=!myMember.homework[i].done;
+  await sb.from('academy_members').update({homework:myMember.homework}).eq('id',myMember.id);
+  renderMyHomework();
+  // 학원장 목록 자동 반영을 위해 members도 업데이트
+  const idx=members.findIndex(x=>x.id===myMember.id);
+  if(idx>=0)members[idx].homework=myMember.homework;
 }
 
 // ── UI HELPERS ────────────────────────────────────────────────
@@ -1021,15 +1062,81 @@ function showTab(tab,el){
   if(tab==='progress')renderProgress();
   if(tab==='feedback')renderFeedback();
   if(tab==='homework'){renderHomework();renderHwForm()}
+  if(tab==='questions')renderQuestions()
 }
 
 function showStudentTab(tab,el){
   document.querySelectorAll('#app-student .section').forEach(s=>s.classList.remove('on'));
   document.querySelectorAll('#app-student .tab-item').forEach(t=>t.classList.remove('on'));
   $('sec-'+tab).classList.add('on');el.classList.add('on');
+  if(tab==='my-questions')renderMyQuestions();
 }
 
 function closeModal(e){if(!e||e.target===$('modal'))$('modal').classList.remove('on')}
+
+// ── QUESTIONS ────────────────────────────────────────────────
+function renderQuestions(){
+  const sid=$('q-sel')?.value;
+  const el=$('q-list');
+  const replyEl=$('q-teacher-reply');
+  if(!el)return;
+  if(!sid){el.innerHTML='<div class="empty-state">학생을 선택하세요</div>';if(replyEl)replyEl.innerHTML='';return}
+  const m=members.find(x=>x.id===sid);
+  const qs=[...(m?.questions||[])].reverse();
+  if(!qs.length){el.innerHTML='<div class="empty-state">질문이 없어요</div>'}
+  else{
+    el.innerHTML='<div class="card">'+qs.map((q,ri)=>{
+      const i=(m.questions.length-1-ri);
+      return`<div class="fb-item">
+        <div class="fb-meta">
+          <span class="badge b-blue">질문</span>
+          <span class="fb-date">${q.date}</span>
+        </div>
+        <div class="fb-text">${q.text}</div>
+        ${q.reply?`<div style="margin-top:8px;padding:8px;background:var(--accent-light);border-radius:var(--r-sm);font-size:13px;color:var(--accent-dark)">💬 ${q.reply}<br><span style="font-size:11px;color:var(--text3)">${q.replyDate||''}</span></div>`
+        :`<div style="margin-top:6px"><input type="text" id="reply-input-${i}" placeholder="답변 입력..." style="margin-bottom:6px">
+          <button class="btn btn-sm btn-primary" onclick="replyQuestion('${sid}',${i})">답변하기</button></div>`}
+      </div>`;
+    }).join('')+'</div>';
+  }
+  if(replyEl)replyEl.innerHTML='';
+}
+
+async function replyQuestion(sid,i){
+  const m=members.find(x=>x.id===sid);if(!m)return;
+  const reply=document.getElementById('reply-input-'+i)?.value.trim();
+  if(!reply){toast('답변을 입력하세요');return}
+  m.questions[i].reply=reply;
+  m.questions[i].replyDate=new Date().toLocaleDateString('ko-KR');
+  await sb.from('academy_members').update({questions:m.questions}).eq('id',sid);
+  renderQuestions();toast('답변을 보냈어요!');
+}
+
+function renderMyQuestions(){
+  const m=myMember;if(!m)return;
+  const qs=[...(m.questions||[])].reverse();
+  const el=$('my-q-list');
+  if(!el)return;
+  if(!qs.length){el.innerHTML='<div class="empty-state">아직 질문이 없어요</div>';return}
+  el.innerHTML='<div class="card">'+qs.map(q=>`
+    <div class="fb-item">
+      <div class="fb-meta"><span class="badge b-blue">내 질문</span><span class="fb-date">${q.date}</span></div>
+      <div class="fb-text">${q.text}</div>
+      ${q.reply?`<div style="margin-top:8px;padding:8px;background:var(--accent-light);border-radius:var(--r-sm);font-size:13px;color:var(--accent-dark)">💬 선생님 답변: ${q.reply}<br><span style="font-size:11px;color:var(--text3)">${q.replyDate||''}</span></div>`
+      :`<div style="margin-top:4px;font-size:12px;color:var(--amber)">⏳ 답변 대기 중</div>`}
+    </div>`).join('')+'</div>';
+}
+
+async function submitQuestion(){
+  if(!myMember){toast('로그인 필요');return}
+  const text=$('my-q-text')?.value.trim();
+  if(!text){toast('질문을 입력하세요');return}
+  if(!myMember.questions)myMember.questions=[];
+  myMember.questions.push({date:new Date().toLocaleDateString('ko-KR'),text,reply:null});
+  $('my-q-text').value='';
+  await sb.from('academy_members').update({questions:myMember.questions}).eq('id',myMember.id);
+  renderMyQuestions();toast('질문을 보냈어요!');
+}
 
 // ── INIT ─────────────────────────────────────────────────────
 (async()=>{
