@@ -197,6 +197,19 @@ input[type=range]{width:100%;accent-color:var(--text)}
 .modal-handle{width:36px;height:4px;border-radius:2px;background:var(--border2);margin:0 auto 16px}
 .modal-title{font-size:17px;font-weight:700;margin-bottom:16px}
 
+/* ── TAB BADGE ── */
+.tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;padding:0 4px;background:var(--accent);color:#fff;border-radius:20px;font-size:10px;font-weight:700;margin-left:4px;line-height:1}
+.tab-badge.green{background:var(--green)}
+.tab-badge.amber{background:var(--amber)}
+
+/* ── STUDENT SUB TABS ── */
+.sub-tabs{display:flex;gap:8px;margin-bottom:12px}
+.sub-tab{flex:1;padding:8px 12px;background:var(--surface);border:2px solid var(--border);border-radius:var(--r-sm);text-align:center;font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px}
+.sub-tab.on{border-color:var(--accent);color:var(--accent);background:var(--accent-light)}
+.sub-tab-count{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;border-radius:20px;font-size:11px;font-weight:700;background:var(--accent);color:#fff}
+.sub-tab.on .sub-tab-count{background:var(--accent-dark)}
+.sub-tab:not(.on) .sub-tab-count{background:var(--text2)}
+
 /* ── FAB ── */
 .fab{position:fixed;bottom:24px;right:20px;width:54px;height:54px;border-radius:50%;background:var(--accent);color:#fff;border:none;font-size:26px;cursor:pointer;display:none;align-items:center;justify-content:center;z-index:60;box-shadow:0 4px 16px rgba(232,80,10,.4)}
 .fab.on{display:flex}
@@ -256,14 +269,14 @@ input[type=range]{width:100%;accent-color:var(--text)}
     <!-- 학원장: 학원명 입력 -->
     <div id="academy-name-section" style="display:none">
       <div class="fg"><label class="fl">학원 이름</label>
-        <input type="text" id="academy-name" placeholder="예: 스피킹짐 강남점"></div>
+        <input type="text" id="academy-name" placeholder="예: 스피킹짐 강남점" autocomplete="off" lang="ko"></div>
     </div>
 
     <!-- 학생: 학원 검색 -->
     <div id="academy-search-section" style="display:none">
       <div class="fg"><label class="fl">학원 검색</label>
         <div class="academy-search">
-          <input type="text" id="academy-search-input" placeholder="학원 이름 검색..." oninput="searchAcademies(this.value)">
+          <input type="text" id="academy-search-input" placeholder="학원 이름 검색..." oninput="searchAcademies(this.value)" autocomplete="off" lang="ko">
           <div class="academy-dropdown" id="academy-dropdown"></div>
         </div>
         <input type="hidden" id="selected-academy-id">
@@ -299,18 +312,25 @@ input[type=range]{width:100%;accent-color:var(--text)}
     <button class="btn btn-sm" onclick="doSignOut()">로그아웃</button>
   </div>
   <div class="tab-nav" id="tab-nav">
-    <div class="tab-item on" onclick="showTab('students',this)">학생목록</div>
-    <div class="tab-item" onclick="showTab('attendance',this)">출석</div>
-    <div class="tab-item" onclick="showTab('progress',this)">진행도</div>
-    <div class="tab-item" onclick="showTab('feedback',this)">피드백</div>
-    <div class="tab-item" onclick="showTab('homework',this)">숙제</div>
-    <div class="tab-item" onclick="showTab('questions',this)">질문</div>
+    <div class="tab-item on" id="tab-students" onclick="showTab('students',this)">학생목록</div>
+    <div class="tab-item" id="tab-attendance" onclick="showTab('attendance',this)">출석</div>
+    <div class="tab-item" id="tab-progress" onclick="showTab('progress',this)">진행도</div>
+    <div class="tab-item" id="tab-feedback" onclick="showTab('feedback',this)">피드백</div>
+    <div class="tab-item" id="tab-homework" onclick="showTab('homework',this)">숙제</div>
+    <div class="tab-item" id="tab-questions" onclick="showTab('questions',this)">질문</div>
   </div>
   <div class="content">
     <div class="section on" id="sec-students">
       <div id="v-list">
+        <div class="sub-tabs">
+          <div class="sub-tab on" id="subtab-approved" onclick="setSubTab('approved')">
+            현재 학생 <span class="sub-tab-count" id="count-approved">0</span>
+          </div>
+          <div class="sub-tab" id="subtab-pending" onclick="setSubTab('pending')">
+            승인 대기 <span class="sub-tab-count" id="count-pending">0</span>
+          </div>
+        </div>
         <div style="margin-bottom:10px"><input type="text" placeholder="학생 검색..." id="search-input" oninput="renderStudents()"></div>
-        <div id="pending-area"></div>
         <div id="student-list"></div>
       </div>
       <div id="v-detail" style="display:none"></div>
@@ -432,6 +452,7 @@ let calMonth=new Date().getMonth(), calYear=new Date().getFullYear();
 let sCalMonth=new Date().getMonth(), sCalYear=new Date().getFullYear();
 let hwMode='personal', hwSel=new Set();
 let authMode='login', selectedRole='owner';
+let studentSubTab='approved';
 
 const $=id=>document.getElementById(id);
 const toast=msg=>{const t=$('toast');t.textContent=msg;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2200)};
@@ -487,7 +508,7 @@ async function doAuth(){
     const pw2=$('a-pw2').value;
     if(pw!==pw2){showErr('비밀번호가 일치하지 않아요');return}
     if(selectedRole==='owner'){
-      const aName=$('academy-name').value.trim();
+      const aName=($('academy-name').value||'').trim();
       if(!aName){showErr('학원 이름을 입력하세요');return}
       const {data,error}=await sb.auth.signUp({email,password:pw});
       if(error){showErr(error.message);return}
@@ -587,7 +608,7 @@ async function loadMembers(){
   $('student-list').innerHTML='<div class="loading"><div class="spinner"></div>불러오는 중...</div>';
   const {data}=await sb.from('academy_members').select('*').eq('academy_id',academy.id).order('created_at');
   members=data||[];
-  populateSelects();renderStudents();
+  populateSelects();renderStudents();updateAllBadges();
 }
 
 async function saveMembers(){
@@ -614,41 +635,69 @@ function populateSelects(){
 }
 
 // ── STUDENT LIST ─────────────────────────────────────────────
+function setSubTab(tab){
+  studentSubTab=tab;
+  document.querySelectorAll('.sub-tab').forEach(t=>t.classList.remove('on'));
+  $('subtab-'+tab)?.classList.add('on');
+  renderStudents();
+}
+
 function renderStudents(){
   const q=($('search-input')?.value||'').toLowerCase();
   const pending=members.filter(m=>m.status==='pending');
-  const approved=members.filter(m=>m.status==='approved'&&(
-    (m.name||'').toLowerCase().includes(q)||(m.email||'').includes(q)||(m.level||'').includes(q)
-  ));
+  const approved=members.filter(m=>m.status==='approved');
 
-  // 승인 대기 섹션
-  const pa=$('pending-area');
-  if(pending.length){
-    pa.innerHTML=`<div class="pending-section">
-      <div class="pending-header"><span style="font-size:18px">🔔</span><span class="pending-header-title">가입 승인 대기 ${pending.length}명</span></div>
-      ${pending.map(m=>`<div class="pending-item">
-        <div><div class="pending-name">${m.name||'이름 미설정'}</div><div class="pending-email">${m.email}</div></div>
-        <div>
-          <button class="approve-btn" onclick="approveMember('${m.id}')">승인</button>
-          <button class="reject-btn" onclick="rejectMember('${m.id}')">거절</button>
-        </div>
-      </div>`).join('')}
-    </div>`;
-  } else pa.innerHTML='';
+  // 카운트 업데이트
+  if($('count-approved'))$('count-approved').textContent=approved.length;
+  if($('count-pending'))$('count-pending').textContent=pending.length;
 
   const list=$('student-list');
-  if(!approved.length){list.innerHTML='<div class="empty-state">승인된 학생이 없어요<br>+ 버튼으로 직접 추가하거나<br>학생 가입 승인을 해주세요</div>';return}
-  list.innerHTML=approved.map((m,i)=>{
+
+  if(studentSubTab==='pending'){
+    if(!pending.length){list.innerHTML='<div class="empty-state">승인 대기 학생이 없어요</div>';return}
+    list.innerHTML=pending.map(m=>`
+      <div class="card" style="border-color:var(--amber)">
+        <div class="s-row" style="margin-bottom:10px">
+          <div class="avatar" style="background:var(--amber-bg);color:var(--amber);border-color:var(--amber)">${(m.name||'?').slice(0,2)}</div>
+          <div style="flex:1">
+            <div class="s-name">${m.name||'이름 미설정'}</div>
+            <div class="s-meta">${m.email}</div>
+            <div class="s-meta">${m.level||''} ${m.goal?'· '+m.goal:''}</div>
+          </div>
+          <span class="pending-tag">대기중</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="approve-btn btn-full" style="flex:1;padding:9px" onclick="approveMember('${m.id}')">✓ 승인</button>
+          <button class="reject-btn btn-full" style="flex:1;padding:9px" onclick="rejectMember('${m.id}')">✕ 거절</button>
+        </div>
+      </div>`).join('');
+    return;
+  }
+
+  // 현재 학생
+  const filtered=approved.filter(m=>
+    (m.name||'').toLowerCase().includes(q)||(m.email||'').includes(q)||(m.level||'').includes(q)
+  );
+  if(!filtered.length){list.innerHTML='<div class="empty-state">학생이 없어요<br>+ 버튼으로 추가하거나<br>가입 승인을 해주세요</div>';return}
+  list.innerHTML=filtered.map((m,i)=>{
     const att=m.attendance||[];
     const done=att.filter(a=>a.status==='attended').length;
     const rate=att.length?Math.round(done/att.length*100):null;
     const rb=rate!==null?`<span class="badge ${rate>=80?'b-green':rate>=60?'b-amber':'b-red'}">${rate}%</span>`:'';
     const rt=m.reenroll_date?`<span class="reenroll-tag">재등록 ${m.reenroll_date}</span>`:'';
+    // 미완료 숙제
+    const undoneHw=(m.homework||[]).filter(h=>!h.done).length;
+    // 미답변 질문
+    const unansweredQ=(m.questions||[]).filter(q=>!q.reply).length;
+    const alerts=[];
+    if(undoneHw>0)alerts.push(`<span class="badge b-amber" style="font-size:10px">숙제 ${undoneHw}</span>`);
+    if(unansweredQ>0)alerts.push(`<span class="badge b-red" style="font-size:10px">질문 ${unansweredQ}</span>`);
     return`<div class="s-card" onclick="showDetail('${m.id}')"><div class="s-row">
       <div class="avatar ${avC(i)}">${(m.name||m.email||'?').slice(0,2)}</div>
       <div style="flex:1;min-width:0">
         <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span class="s-name">${m.name||m.email}</span>${rt}</div>
         <div class="s-meta">${m.level||'레벨 미설정'} · ${m.goal||'목표 미설정'}</div>
+        ${alerts.length?`<div style="display:flex;gap:4px;margin-top:4px">${alerts.join('')}</div>`:''}
       </div>
       <div>${rb}</div>
     </div></div>`;
@@ -658,14 +707,14 @@ function renderStudents(){
 async function approveMember(id){
   await sb.from('academy_members').update({status:'approved'}).eq('id',id);
   toast('승인됐어요!');
-  await loadMembers();
+  await loadMembers();updateAllBadges();
 }
 
 async function rejectMember(id){
   if(!confirm('거절하면 해당 학생의 가입 신청이 삭제돼요. 계속할까요?'))return;
   await sb.from('academy_members').delete().eq('id',id);
   toast('거절됐어요');
-  await loadMembers();
+  await loadMembers();updateAllBadges();
 }
 
 function getMemberIdx(id){return members.filter(m=>m.status==='approved').findIndex(m=>m.id===id)}
@@ -792,7 +841,7 @@ async function toggleAtt(sid,date){
   else if(m.attendance[i].status==='attended')m.attendance[i].status='absent';
   else m.attendance.splice(i,1);
   await sb.from('academy_members').update({attendance:m.attendance}).eq('id',sid);
-  renderCalendar();
+  renderCalendar();updateAllBadges();
 }
 
 // ── PROGRESS ─────────────────────────────────────────────────
@@ -863,7 +912,7 @@ async function addFeedback(){
   m.feedback.push({date:new Date().toLocaleDateString('ko-KR'),category:cat,text});
   $('fb-text').value='';
   await sb.from('academy_members').update({feedback:m.feedback}).eq('id',sid);
-  renderFeedback();toast('피드백 저장됐어요');
+  renderFeedback();updateAllBadges();toast('피드백 저장됐어요');
 }
 
 // ── HOMEWORK ─────────────────────────────────────────────────
@@ -952,7 +1001,7 @@ async function toggleHW(sid,i){
   const m=members.find(x=>x.id===sid);if(!m||!m.homework[i])return;
   m.homework[i].done=!m.homework[i].done;
   await sb.from('academy_members').update({homework:m.homework}).eq('id',sid);
-  renderHomework();
+  renderHomework();updateAllBadges();
 }
 
 // ── STUDENT VIEW ─────────────────────────────────────────────
@@ -1062,7 +1111,7 @@ function showTab(tab,el){
   if(tab==='progress')renderProgress();
   if(tab==='feedback')renderFeedback();
   if(tab==='homework'){renderHomework();renderHwForm()}
-  if(tab==='questions')renderQuestions()
+  if(tab==='questions'){renderQuestions()}
 }
 
 function showStudentTab(tab,el){
@@ -1074,7 +1123,60 @@ function showStudentTab(tab,el){
 
 function closeModal(e){if(!e||e.target===$('modal'))$('modal').classList.remove('on')}
 
-// ── QUESTIONS ────────────────────────────────────────────────
+// ── BADGE SYSTEM ─────────────────────────────────────────────
+function updateAllBadges(){
+  const today=new Date().toISOString().split('T')[0];
+  const approved=members.filter(m=>m.status==='approved');
+  const pending=members.filter(m=>m.status==='pending');
+
+  // 학생목록 - 승인대기 뱃지
+  const pendingCount=pending.length;
+  updateTabBadge('tab-students', pendingCount>0?pendingCount:0, 'accent');
+
+  // 출석 - 오늘 미체크 학생 수
+  const unchecked=approved.filter(m=>{
+    const att=m.attendance||[];
+    return !att.find(a=>a.date===today);
+  }).length;
+  updateTabBadge('tab-attendance', unchecked, 'amber');
+
+  // 숙제 - 미완료 숙제 있는 학생 수
+  const hwAlert=approved.filter(m=>(m.homework||[]).some(h=>!h.done)).length;
+  updateTabBadge('tab-homework', hwAlert, 'amber');
+
+  // 질문 - 미답변 질문 총합
+  const unanswered=approved.reduce((sum,m)=>sum+(m.questions||[]).filter(q=>!q.reply).length,0);
+  updateTabBadge('tab-questions', unanswered, 'accent');
+
+  // 피드백 - 이번 주 피드백 없는 학생 수
+  const weekAgo=new Date();weekAgo.setDate(weekAgo.getDate()-7);
+  const noFb=approved.filter(m=>{
+    const fb=m.feedback||[];
+    if(!fb.length)return true;
+    const last=new Date(fb[fb.length-1].date.replace(/\./g,'-'));
+    return last<weekAgo;
+  }).length;
+  updateTabBadge('tab-feedback', noFb, 'amber');
+
+  // 카운트 업데이트
+  if($('count-approved'))$('count-approved').textContent=approved.length;
+  if($('count-pending'))$('count-pending').textContent=pendingCount;
+}
+
+function updateTabBadge(tabId, count, type){
+  const el=$(tabId);
+  if(!el)return;
+  const existing=el.querySelector('.tab-badge');
+  if(existing)existing.remove();
+  if(count>0){
+    const badge=document.createElement('span');
+    badge.className='tab-badge'+(type==='amber'?' amber':'');
+    badge.textContent=count>99?'99+':count;
+    el.appendChild(badge);
+  }
+}
+
+// ── QUESTIONS ─────────────────────────────────────────────────
 function renderQuestions(){
   const sid=$('q-sel')?.value;
   const el=$('q-list');
@@ -1109,7 +1211,7 @@ async function replyQuestion(sid,i){
   m.questions[i].reply=reply;
   m.questions[i].replyDate=new Date().toLocaleDateString('ko-KR');
   await sb.from('academy_members').update({questions:m.questions}).eq('id',sid);
-  renderQuestions();toast('답변을 보냈어요!');
+  renderQuestions();updateAllBadges();toast('답변을 보냈어요!');
 }
 
 function renderMyQuestions(){
@@ -1135,7 +1237,7 @@ async function submitQuestion(){
   myMember.questions.push({date:new Date().toLocaleDateString('ko-KR'),text,reply:null});
   $('my-q-text').value='';
   await sb.from('academy_members').update({questions:myMember.questions}).eq('id',myMember.id);
-  renderMyQuestions();toast('질문을 보냈어요!');
+  renderMyQuestions();updateAllBadges();toast('질문을 보냈어요!');
 }
 
 // ── INIT ─────────────────────────────────────────────────────
