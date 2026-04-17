@@ -63,7 +63,7 @@ textarea{resize:vertical;min-height:72px}
 .divider{height:2px;background:var(--border);margin:14px 0}
 
 /* ── APP SHELL ── */
-.screen{display:none;flex-direction:column;height:100vh;height:-webkit-fill-available}
+.screen{display:none;flex-direction:column;min-height:100vh;min-height:-webkit-fill-available}
 .screen.on{display:flex}
 .app-header{background:var(--surface);border-bottom:2px solid var(--border);padding:13px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 .header-left{display:flex;align-items:center;gap:8px}
@@ -73,14 +73,14 @@ textarea{resize:vertical;min-height:72px}
 .header-sub{font-size:11px;color:var(--text2)}
 
 /* ── BOTTOM NAV ── */
-.bottom-nav{background:var(--surface);border-top:2px solid var(--border);display:flex;flex-shrink:0}
+.bottom-nav{background:var(--surface);border-top:2px solid var(--border);display:flex;flex-shrink:0;position:fixed;bottom:0;left:0;right:0;z-index:80;max-width:480px;margin:0 auto}
 .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 4px;cursor:pointer;color:var(--text2);position:relative;font-size:11px;font-weight:700;gap:3px}
 .nav-item.on{color:var(--accent)}
 .nav-icon{font-size:20px;line-height:1}
 .nav-badge{position:absolute;top:6px;right:calc(50% - 16px);background:var(--accent);color:#fff;border-radius:20px;font-size:10px;font-weight:700;min-width:16px;height:16px;padding:0 4px;display:none;align-items:center;justify-content:center}
 .nav-badge.on{display:flex}
 
-.content{flex:1;overflow-y:auto;padding-bottom:16px}
+.content{flex:1;overflow-y:auto;padding-bottom:80px}
 
 /* ── STUDENT LIST ── */
 .page{display:none;padding:16px}
@@ -217,6 +217,15 @@ input[type=range]{width:100%;accent-color:var(--text)}
 .alert-icon{font-size:18px;flex-shrink:0}
 .alert-text{font-size:13px;font-weight:500;line-height:1.5}
 .alert-time{font-size:11px;color:var(--text3);margin-top:3px}
+.show-more-btn{width:100%;padding:9px;background:var(--bg);border:2px solid var(--border);border-radius:var(--r-sm);font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;margin-top:6px;font-family:inherit;transition:all .15s}
+.show-more-btn:active{background:var(--border)}
+.page-dots{display:flex;gap:5px;align-items:center;justify-content:center;margin-top:10px}
+.page-dot{width:8px;height:8px;border-radius:50%;background:var(--border2);cursor:pointer;transition:all .15s;border:none;padding:0}
+.page-dot.on{background:var(--accent);width:20px;border-radius:4px}
+.show-more-btn{width:100%;padding:9px;background:var(--bg);border:2px solid var(--border);border-radius:var(--r-sm);font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;margin-top:8px;font-family:inherit}
+.show-more-btn:active{opacity:.7}
+.show-more-btn{width:100%;padding:9px;background:var(--bg);border:2px solid var(--border);border-radius:var(--r-sm);font-size:13px;font-weight:700;color:var(--accent);cursor:pointer;margin-top:8px;font-family:inherit;transition:opacity .15s}
+.show-more-btn:active{opacity:.6}
 .role-banner{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:var(--r-sm);margin-bottom:12px;font-size:13px;font-weight:700;border:2px solid}
 .t-banner{background:var(--accent-light);color:var(--accent-dark);border-color:#F5C4B3}
 .s-banner{background:var(--blue-bg);color:var(--blue-dark);border-color:#B5D4F4}
@@ -368,6 +377,8 @@ let members=[],classes=[],classMemberships=[];
 let calMonth=new Date().getMonth(),calYear=new Date().getFullYear();
 let currentMemberId=null,hwMode='personal',hwSel=new Set();
 let authMode='login',selectedRole='owner';
+let fbShowCount=3,qShowCount=3;
+
 
 const $=id=>document.getElementById(id);
 const toast=msg=>{const t=$('toast');t.textContent=msg;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),2200)};
@@ -1106,6 +1117,7 @@ function showStudentApp(){
   const m=myMember;
   $('student-title').textContent=m.academies?.name||'내 학습';
   $('student-sub').textContent=m.name||user.email;
+  fbShowCount=3;qShowCount=3;
   $('app-student').classList.add('on');
   renderStudentView();
 }
@@ -1161,11 +1173,22 @@ function renderStudentView(){
       </div>`).join('')}
     </div>
     <div class="card">
-      <div class="card-title">피드백</div>
-      ${[...m.feedback||[]].reverse().map(f=>`<div class="item-row">
-        <div class="item-meta"><span class="badge ${CAT_CLASS[f.category?.split(',')[0]?.trim()]||'b-gray'}">${f.category||'기타'}</span><span class="item-date">${f.date}</span></div>
-        <div class="item-text">${f.text}</div>
-      </div>`).join('')||'<div style="font-size:13px;color:var(--text2)">피드백이 없어요</div>'}
+      <div class="section-header">
+        <div class="card-title" style="margin:0">피드백</div>
+        ${(m.feedback||[]).length>0?`<span style="font-size:12px;color:var(--text2);font-weight:700">총 ${(m.feedback||[]).length}개</span>`:''}
+      </div>
+      ${(()=>{
+        const fb=[...m.feedback||[]].reverse();
+        if(!fb.length)return '<div style="font-size:13px;color:var(--text2);padding:4px 0">피드백이 없어요</div>';
+        const shown=fb.slice(0,fbShowCount);
+        const rest=fb.length-fbShowCount;
+        return shown.map(f=>`<div class="item-row">
+          <div class="item-meta"><span class="badge ${CAT_CLASS[f.category?.split(',')[0]?.trim()]||'b-gray'}">${f.category||'기타'}</span><span class="item-date">${f.date}</span></div>
+          <div class="item-text">${f.text}</div>
+        </div>`).join('')
+        +(rest>0?`<button class="show-more-btn" onclick="fbShowCount+=3;renderStudentView()">▾ 더보기 (${rest}개 더)</button>`:'')
+        +(fbShowCount>3&&rest<=0?`<button class="show-more-btn" onclick="fbShowCount=3;renderStudentView()">▴ 접기</button>`:'');
+      })()}
     </div>
     <div class="card">
       <div class="card-title">숙제</div>
@@ -1178,12 +1201,23 @@ function renderStudentView(){
       }).join('')||'<div style="font-size:13px;color:var(--text2)">숙제가 없어요</div>'}
     </div>
     <div class="card">
-      <div class="card-title">질문</div>
-      ${[...qs].reverse().map(q=>`<div class="item-row">
-        <div class="item-meta"><span class="badge b-blue">질문</span><span class="item-date">${q.date}</span></div>
-        <div class="item-text">${q.text}</div>
-        ${q.reply?`<div class="q-reply">💬 ${q.reply}</div>`:`<div class="q-pending">⏳ 답변 대기 중</div>`}
-      </div>`).join('')||'<div style="font-size:13px;color:var(--text2)">질문이 없어요</div>'}
+      <div class="section-header">
+        <div class="card-title" style="margin:0">질문</div>
+        ${qs.length>0?`<span style="font-size:12px;color:var(--text2);font-weight:700">총 ${qs.length}개</span>`:''}
+      </div>
+      ${(()=>{
+        const qrev=[...qs].reverse();
+        if(!qrev.length)return '<div style="font-size:13px;color:var(--text2);padding:4px 0">질문이 없어요</div>';
+        const shown=qrev.slice(0,qShowCount);
+        const rest=qrev.length-qShowCount;
+        return shown.map(q=>`<div class="item-row">
+          <div class="item-meta"><span class="badge b-blue">질문</span><span class="item-date">${q.date}</span></div>
+          <div class="item-text">${q.text}</div>
+          ${q.reply?`<div class="q-reply">💬 ${q.reply}</div>`:`<div class="q-pending">⏳ 답변 대기 중</div>`}
+        </div>`).join('')
+        +(rest>0?`<button class="show-more-btn" onclick="qShowCount+=3;renderStudentView()">▾ 더보기 (${rest}개 더)</button>`:'')
+        +(qShowCount>3&&rest<=0?`<button class="show-more-btn" onclick="qShowCount=3;renderStudentView()">▴ 접기</button>`:'');
+      })()}
       <div class="divider"></div>
       <div class="fg"><textarea id="my-q-text" placeholder="선생님께 질문하세요..."></textarea></div>
       <button class="btn btn-primary btn-full" onclick="submitMyQuestion()">질문 보내기</button>
