@@ -378,6 +378,7 @@ let calMonth=new Date().getMonth(),calYear=new Date().getFullYear();
 let currentMemberId=null,hwMode='personal',hwSel=new Set();
 let authMode='login',selectedRole='owner';
 let fbShowCount=3,qShowCount=3;
+let lastFbCount=0;
 
 
 const $=id=>document.getElementById(id);
@@ -1118,6 +1119,7 @@ function showStudentApp(){
   $('student-title').textContent=m.academies?.name||'내 학습';
   $('student-sub').textContent=m.name||user.email;
   fbShowCount=3;qShowCount=3;
+  lastFbCount=(myMember.feedback||[]).length;
   $('app-student').classList.add('on');
   renderStudentView();
 }
@@ -1148,11 +1150,18 @@ function renderStudentView(){
 
   $('student-detail').innerHTML=`
     <div class="role-banner s-banner">🎓 ${m.academies?.name||'학원'} 수강 중</div>
+    ${(m.feedback||[]).length>lastFbCount?`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--accent-light);border:2px solid #F5C4B3;border-radius:var(--r-sm);margin-bottom:12px;font-size:13px;font-weight:700;color:var(--accent-dark)">
+      🆕 새로운 피드백 ${(m.feedback||[]).length-lastFbCount}개가 왔어요!
+      <span style="margin-left:auto;cursor:pointer;font-size:12px" onclick="lastFbCount=(myMember.feedback||[]).length;renderStudentView()">확인 ✓</span>
+    </div>`:''}
     <div class="stat-grid">
       <div class="stat"><div class="stat-v">${done}</div><div class="stat-l">출석</div></div>
-      <div class="stat"><div class="stat-v" style="color:${rate>=80?'var(--green)':rate>=60?'var(--amber)':'var(--red)'}">${rate}%</div><div class="stat-l">출석률</div></div>
       <div class="stat"><div class="stat-v">${hw.filter(h=>h.done).length}/${hw.length}</div><div class="stat-l">숙제</div></div>
-      <div class="stat"><div class="stat-v">${qs.filter(q=>q.reply).length}</div><div class="stat-l">답변</div></div>
+      <div class="stat" style="${(m.feedback||[]).length>lastFbCount?'border-color:var(--accent);background:var(--accent-light)':''}">
+        <div class="stat-v" style="${(m.feedback||[]).length>lastFbCount?'color:var(--accent)':''}">${(m.feedback||[]).length}</div>
+        <div class="stat-l">${(m.feedback||[]).length>lastFbCount?'🆕 피드백':'피드백'}</div>
+      </div>
+      <div class="stat"><div class="stat-v">${qs.filter(q=>!q.reply).length}</div><div class="stat-l">미답변</div></div>
     </div>
     <div class="card">
       <div class="card-title">출석</div>
@@ -1194,9 +1203,17 @@ function renderStudentView(){
       <div class="card-title">숙제</div>
       ${[...hw].reverse().map((h,ri)=>{
         const i=hw.length-1-ri;
-        return`<div class="hw-row">
-          <div class="hw-check ${h.done?'done':''}" onclick="toggleMyHW(${i})">${h.done?`<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#1A8A4A" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`:''}</div>
-          <div style="flex:1"><div class="hw-title ${h.done?'hw-done-text':''}">${h.title}<span class="hw-tag ${h.type==='common'?'tag-c':'tag-p'}">${h.type==='common'?'공통':'개별'}</span></div>${h.due?`<div class="hw-due">마감 ${h.due}${h.done?' · 완료':''}</div>`:''}</div>
+        const isOverdue=!h.done&&h.due&&new Date(h.due)<new Date();
+        const canCheck=!isOverdue;
+        return`<div class="hw-row" style="${isOverdue?'opacity:.6':''}">
+          <div class="hw-check ${h.done?'done':isOverdue?'':'hover-check'}"
+            onclick="${canCheck?`toggleMyHW(${i})`:`toast('마감일이 지난 숙제예요')`}"
+            style="${isOverdue?'cursor:not-allowed;border-color:#F7C1C1;background:var(--red-bg)':''}"
+          >${h.done?`<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#1A8A4A" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`:isOverdue?'✕':''}</div>
+          <div style="flex:1">
+            <div class="hw-title ${h.done?'hw-done-text':''}">${h.title}<span class="hw-tag ${h.type==='common'?'tag-c':'tag-p'}">${h.type==='common'?'공통':'개별'}</span></div>
+            ${h.due?`<div class="hw-due" style="${isOverdue?'color:var(--red);font-weight:700':''}">${isOverdue?'⚠️ 마감 지남':'마감'} ${h.due}${h.done?' · 완료':''}</div>`:''}
+          </div>
         </div>`;
       }).join('')||'<div style="font-size:13px;color:var(--text2)">숙제가 없어요</div>'}
     </div>
@@ -1227,7 +1244,13 @@ let sCalMonth=new Date().getMonth(),sCalYear=new Date().getFullYear();
 function changeStudentMonth(d){sCalMonth+=d;if(sCalMonth>11){sCalMonth=0;sCalYear++}if(sCalMonth<0){sCalMonth=11;sCalYear--}renderStudentView()}
 async function toggleMyHW(i){
   if(!myMember?.homework[i])return;
-  myMember.homework[i].done=!myMember.homework[i].done;
+  const h=myMember.homework[i];
+  // 마감일이 지났으면 체크 불가
+  if(!h.done&&h.due){
+    const due=new Date(h.due);due.setHours(23,59,59);
+    if(due<new Date()){toast('마감일이 지난 숙제예요');return}
+  }
+  h.done=!h.done;
   await sb.from('academy_members').update({homework:myMember.homework}).eq('id',myMember.id);
   renderStudentView();
 }
