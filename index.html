@@ -720,20 +720,19 @@ function renderStudents(){
     return;
   }
 
-  // 현재 학생
+  // 현재 학생 - 반별 그룹핑
   const filtered=approved.filter(m=>
     (m.name||'').toLowerCase().includes(q)||(m.email||'').includes(q)||(m.level||'').includes(q)
   );
   if(!filtered.length){list.innerHTML='<div class="empty-state">학생이 없어요<br>+ 버튼으로 추가하거나<br>가입 승인을 해주세요</div>';return}
-  list.innerHTML=filtered.map((m,i)=>{
+
+  function makeCard(m,i){
     const att=m.attendance||[];
     const done=att.filter(a=>a.status==='attended').length;
     const rate=att.length?Math.round(done/att.length*100):null;
     const rb=rate!==null?`<span class="badge ${rate>=80?'b-green':rate>=60?'b-amber':'b-red'}">${rate}%</span>`:'';
     const rt=m.reenroll_date?`<span class="reenroll-tag">재등록 ${m.reenroll_date}</span>`:'';
-    // 미완료 숙제
     const undoneHw=(m.homework||[]).filter(h=>!h.done).length;
-    // 미답변 질문
     const unansweredQ=(m.questions||[]).filter(q=>!q.reply).length;
     const alerts=[];
     if(undoneHw>0)alerts.push(`<span class="badge b-amber" style="font-size:10px">숙제 ${undoneHw}</span>`);
@@ -747,8 +746,27 @@ function renderStudents(){
       </div>
       <div>${rb}</div>
     </div></div>`;
-  }).join('');
-  html+='';
+  }
+
+  if(!classes||!classes.length){
+    list.innerHTML=filtered.map((m,i)=>makeCard(m,i)).join('');
+    return;
+  }
+
+  // 반별 그룹핑
+  const grouped={};
+  filtered.forEach(m=>{
+    const mClasses=classMemberships.filter(cm=>cm.member_id===m.id).map(cm=>classes.find(c=>c.id===cm.class_id)?.name||'').filter(Boolean);
+    if(!mClasses.length){if(!grouped['미배정'])grouped['미배정']=[];grouped['미배정'].push(m);}
+    else mClasses.forEach(cn=>{if(!grouped[cn])grouped[cn]=[];grouped[cn].push(m);});
+  });
+
+  const classOrder=[...classes.map(c=>c.name),'미배정'];
+  let html='';
+  classOrder.forEach(cn=>{
+    if(!grouped[cn]||!grouped[cn].length)return;
+    html+=`<div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;padding:8px 4px 4px;margin-top:4px">${cn} <span style="font-weight:400">(${grouped[cn].length}명)</span></div>`;
+    html+=grouped[cn].map((m,i)=>makeCard(m,i)).join('');
   });
   list.innerHTML=html||'<div class="empty-state">학생이 없어요</div>';
 }
