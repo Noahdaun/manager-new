@@ -217,6 +217,10 @@ input[type=range]{width:100%;accent-color:var(--text)}
 .alert-icon{font-size:18px;flex-shrink:0}
 .alert-text{font-size:13px;font-weight:500;line-height:1.5}
 .alert-time{font-size:11px;color:var(--text3);margin-top:3px}
+.tab-nav{background:var(--surface);border-bottom:2px solid var(--border);display:flex;overflow-x:auto;flex-shrink:0;scrollbar-width:none}
+.tab-nav::-webkit-scrollbar{display:none}
+.tab-item{flex:1;min-width:52px;padding:10px 4px;text-align:center;font-size:12px;font-weight:700;color:var(--text2);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;transition:all .15s}
+.tab-item.on{color:var(--accent);border-bottom-color:var(--accent)}
 .show-more-btn{width:100%;padding:9px;background:var(--bg);border:2px solid var(--border);border-radius:var(--r-sm);font-size:13px;font-weight:700;color:var(--text2);cursor:pointer;margin-top:6px;font-family:inherit;transition:all .15s}
 .show-more-btn:active{background:var(--border)}
 .page-dots{display:flex;gap:5px;align-items:center;justify-content:center;margin-top:10px}
@@ -349,11 +353,26 @@ input[type=range]{width:100%;accent-color:var(--text)}
 <!-- ── 학생 본인 화면 ── -->
 <div class="screen" id="app-student">
   <div class="app-header">
-    <div class="header-left"><div><div class="header-title" id="student-title">내 학습</div><div class="header-sub" id="student-sub"></div></div></div>
+    <div class="header-left"><div>
+      <div class="header-title" id="student-title">내 학습</div>
+      <div class="header-sub" id="student-sub"></div>
+    </div></div>
     <button class="btn btn-sm" onclick="doSignOut()">로그아웃</button>
   </div>
+  <!-- 학생 요약 통계 (고정) -->
+  <div id="student-stats" style="background:var(--surface);border-bottom:2px solid var(--border);padding:12px 16px;flex-shrink:0"></div>
+  <!-- 탭 네비 -->
+  <div class="tab-nav" id="student-tab-nav">
+    <div class="tab-item on" id="stab-att" onclick="showStudentTab('att')">📅 출석</div>
+    <div class="tab-item" id="stab-progress" onclick="showStudentTab('progress')">📊 진행도</div>
+    <div class="tab-item" id="stab-hw" onclick="showStudentTab('hw')">📝 숙제</div>
+    <div class="tab-item" id="stab-q" onclick="showStudentTab('q')">❓ 질문</div>
+  </div>
   <div class="content">
-    <div style="padding:16px" id="student-detail"></div>
+    <div class="page on" id="s-page-att"></div>
+    <div class="page" id="s-page-progress"></div>
+    <div class="page" id="s-page-hw"></div>
+    <div class="page" id="s-page-q"></div>
   </div>
 </div>
 
@@ -377,7 +396,7 @@ let members=[],classes=[],classMemberships=[];
 let calMonth=new Date().getMonth(),calYear=new Date().getFullYear();
 let currentMemberId=null,hwMode='personal',hwSel=new Set();
 let authMode='login',selectedRole='owner';
-let fbShowCount=3,qShowCount=3;
+let fbShowCount=3,qShowCount=3,hwShowCount=3;
 let lastFbCount=0;
 
 
@@ -1118,53 +1137,91 @@ function showStudentApp(){
   const m=myMember;
   $('student-title').textContent=m.academies?.name||'내 학습';
   $('student-sub').textContent=m.name||user.email;
-  fbShowCount=3;qShowCount=3;
+  fbShowCount=3;qShowCount=3;hwShowCount=3;
   lastFbCount=(myMember.feedback||[]).length;
   $('app-student').classList.add('on');
+  // 탭 초기화
+  document.querySelectorAll('#student-tab-nav .tab-item').forEach(t=>t.classList.remove('on'));
+  document.querySelectorAll('#app-student .page').forEach(p=>p.classList.remove('on'));
+  $('stab-att')?.classList.add('on');
+  $('s-page-att')?.classList.add('on');
   renderStudentView();
 }
-function renderStudentView(){
-  const m=myMember;
+function showStudentTab(tab){
+  document.querySelectorAll('#student-tab-nav .tab-item').forEach(t=>t.classList.remove('on'));
+  document.querySelectorAll('#app-student .page').forEach(p=>p.classList.remove('on'));
+  $('stab-'+tab)?.classList.add('on');
+  $('s-page-'+tab)?.classList.add('on');
+  renderStudentStats();
+  if(tab==='att')renderStudentAtt();
+  if(tab==='progress')renderStudentProgress();
+  if(tab==='hw')renderStudentHw();
+  if(tab==='q')renderStudentQ();
+}
+
+function renderStudentStats(){
+  const m=myMember;if(!m)return;
+  const el=$('student-stats');if(!el)return;
   const att=m.attendance||[];
-  const done=att.filter(a=>a.status==='attended').length;
-  const rate=att.length?Math.round(done/att.length*100):0;
-  const prog=m.progress||{};
   const hw=m.homework||[];
-  const qs=m.questions||[];
-  const CAT_CLASS={발음:'b-blue',문법:'b-orange',어휘:'b-amber',유창성:'b-green',표현력:'b-purple',기타:'b-gray'};
+  const fb=m.feedback||[];
+  // 해당 월 출석/숙제
+  const mn=`${sCalYear}-${String(sCalMonth+1).padStart(2,'0')}`;
+  const mAtt=att.filter(a=>a.date.startsWith(mn));
+  const mAttDone=mAtt.filter(a=>a.status==='attended').length;
+  // 해당 월 숙제 (마감일 기준)
+  const mHw=hw.filter(h=>h.due&&h.due.startsWith(mn.slice(0,7)));
+  const mHwDone=mHw.filter(h=>h.done).length;
+  const newFb=fb.length>lastFbCount;
+  const mStr=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  el.innerHTML=`
+    <div style="font-size:11px;color:var(--text2);font-weight:700;margin-bottom:8px;text-align:center">${sCalYear}년 ${mStr[sCalMonth]} 기준</div>
+    <div class="stat-grid" style="margin:0">
+      <div class="stat"><div class="stat-v">${mAttDone}</div><div class="stat-l">이번달 출석</div></div>
+      <div class="stat"><div class="stat-v">${mHwDone}/${mHw.length||0}</div><div class="stat-l">이번달 숙제</div></div>
+      <div class="stat" style="${newFb?'border-color:var(--accent);background:var(--accent-light)':''}">
+        <div class="stat-v" style="${newFb?'color:var(--accent)':''}">${fb.length}</div>
+        <div class="stat-l">${newFb?'🆕 피드백':'피드백'}</div>
+      </div>
+      <div class="stat"><div class="stat-v">${(m.questions||[]).filter(q=>!q.reply).length}</div><div class="stat-l">미답변</div></div>
+    </div>`;
+}
+
+function renderStudentView(){
+  const m=myMember;if(!m)return;
+  $('student-title').textContent=m.academies?.name||'내 학습';
+  $('student-sub').textContent=m.name||user.email;
+  renderStudentStats();
+  renderStudentAtt();
+  // 현재 탭 유지
+  const activeTab=document.querySelector('#student-tab-nav .tab-item.on');
+  if(!activeTab){showStudentTab('att');}
+}
+
+function renderStudentAtt(){
+  const m=myMember;if(!m)return;
+  const el=$('s-page-att');if(!el)return;
+  const att=m.attendance||[];
   const mStr=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   const mn=`${sCalYear}-${String(sCalMonth+1).padStart(2,'0')}`;
   const mAtt=att.filter(a=>a.date.startsWith(mn));
-  const first=new Date(sCalYear,sCalMonth,1).getDay(),days=new Date(sCalYear,sCalMonth+1,0).getDate();
-  const today=new Date(),todayStr=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const todayStr=new Date().toISOString().split('T')[0];
+  const first=new Date(sCalYear,sCalMonth,1).getDay();
+  const days=new Date(sCalYear,sCalMonth+1,0).getDate();
   let cal='';
   for(let i=0;i<first;i++)cal+='<div class="cal-day emp"></div>';
   for(let d=1;d<=days;d++){
     const ds=`${sCalYear}-${String(sCalMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const rec=att.find(a=>a.date===ds);
     let cls='cal-day';
-    if(rec?.status==='attended')cls+=' att';else if(rec?.status==='absent')cls+=' abs';
+    if(rec?.status==='attended')cls+=' att';
+    else if(rec?.status==='absent')cls+=' abs';
     if(ds===todayStr)cls+=' today';
     cal+=`<div class="${cls}">${d}</div>`;
   }
-
-  $('student-detail').innerHTML=`
-    <div class="role-banner s-banner">🎓 ${m.academies?.name||'학원'} 수강 중</div>
-    ${(m.feedback||[]).length>lastFbCount?`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--accent-light);border:2px solid #F5C4B3;border-radius:var(--r-sm);margin-bottom:12px;font-size:13px;font-weight:700;color:var(--accent-dark)">
-      🆕 새로운 피드백 ${(m.feedback||[]).length-lastFbCount}개가 왔어요!
-      <span style="margin-left:auto;cursor:pointer;font-size:12px" onclick="lastFbCount=(myMember.feedback||[]).length;renderStudentView()">확인 ✓</span>
-    </div>`:''}
-    <div class="stat-grid">
-      <div class="stat"><div class="stat-v">${done}</div><div class="stat-l">출석</div></div>
-      <div class="stat"><div class="stat-v">${hw.filter(h=>h.done).length}/${hw.length}</div><div class="stat-l">숙제</div></div>
-      <div class="stat" style="${(m.feedback||[]).length>lastFbCount?'border-color:var(--accent);background:var(--accent-light)':''}">
-        <div class="stat-v" style="${(m.feedback||[]).length>lastFbCount?'color:var(--accent)':''}">${(m.feedback||[]).length}</div>
-        <div class="stat-l">${(m.feedback||[]).length>lastFbCount?'🆕 피드백':'피드백'}</div>
-      </div>
-      <div class="stat"><div class="stat-v">${qs.filter(q=>!q.reply).length}</div><div class="stat-l">미답변</div></div>
-    </div>
+  const totalDone=att.filter(a=>a.status==='attended').length;
+  el.innerHTML=`<div style="padding:16px">
     <div class="card">
-      <div class="card-title">출석</div>
       <div class="month-nav">
         <button class="btn btn-sm" onclick="changeStudentMonth(-1)">←</button>
         <span>${sCalYear}년 ${mStr[sCalMonth]}</span>
@@ -1172,76 +1229,123 @@ function renderStudentView(){
       </div>
       <div class="cal-hdr"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
       <div class="cal-grid">${cal}</div>
-      <div class="att-sum" style="margin-top:8px">이번달 출석 <b>${mAtt.filter(a=>a.status==='attended').length}회</b> / 결석 <b>${mAtt.filter(a=>a.status==='absent').length}회</b></div>
+      <div class="att-sum" style="margin-top:10px">
+        이번달 출석 <b>${mAtt.filter(a=>a.status==='attended').length}회</b> / 결석 <b>${mAtt.filter(a=>a.status==='absent').length}회</b>
+        <span style="margin-left:12px;color:var(--text3)">전체 <b>${totalDone}회</b></span>
+      </div>
     </div>
+  </div>`;
+}
+
+function renderStudentProgress(){
+  const m=myMember;if(!m)return;
+  const el=$('s-page-progress');if(!el)return;
+  const prog=m.progress||{};
+  const fb=[...m.feedback||[]].reverse();
+  const CAT_CLASS={발음:'b-blue',문법:'b-orange',어휘:'b-amber',유창성:'b-green',표현력:'b-purple',기타:'b-gray'};
+  const shownFb=fb.slice(0,fbShowCount);
+  const restFb=fb.length-fbShowCount;
+  const newFb=fb.length>lastFbCount;
+  el.innerHTML=`<div style="padding:16px">
+    ${newFb?`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--accent-light);border:2px solid #F5C4B3;border-radius:var(--r-sm);margin-bottom:12px;font-size:13px;font-weight:700;color:var(--accent-dark)">
+      🆕 새 피드백 ${fb.length-lastFbCount}개!
+      <span style="margin-left:auto;cursor:pointer;font-size:12px;color:var(--accent)" onclick="lastFbCount=(myMember.feedback||[]).length;renderStudentProgress()">확인 ✓</span>
+    </div>`:''}
     <div class="card">
       <div class="card-title">진행도</div>
       ${PROG.map(({k,l,c})=>`<div class="prog-row">
         <div class="prog-lrow"><span class="prog-lbl">${l}</span><span class="prog-val" style="color:${c}">${prog[k]||0}%</span></div>
         <div class="prog-bar"><div class="prog-fill" style="width:${prog[k]||0}%;background:${c}"></div></div>
       </div>`).join('')}
+      ${m.notes?`<div style="margin-top:10px;padding:10px;background:var(--bg);border-radius:var(--r-sm);font-size:13px;color:var(--text2);border:1px solid var(--border)">${m.notes}</div>`:''}
     </div>
     <div class="card">
       <div class="section-header">
         <div class="card-title" style="margin:0">피드백</div>
-        ${(m.feedback||[]).length>0?`<span style="font-size:12px;color:var(--text2);font-weight:700">총 ${(m.feedback||[]).length}개</span>`:''}
+        ${fb.length?`<span style="font-size:12px;color:var(--text2);font-weight:700">총 ${fb.length}개</span>`:''}
       </div>
-      ${(()=>{
-        const fb=[...m.feedback||[]].reverse();
-        if(!fb.length)return '<div style="font-size:13px;color:var(--text2);padding:4px 0">피드백이 없어요</div>';
-        const shown=fb.slice(0,fbShowCount);
-        const rest=fb.length-fbShowCount;
-        return shown.map(f=>`<div class="item-row">
-          <div class="item-meta"><span class="badge ${CAT_CLASS[f.category?.split(',')[0]?.trim()]||'b-gray'}">${f.category||'기타'}</span><span class="item-date">${f.date}</span></div>
-          <div class="item-text">${f.text}</div>
-        </div>`).join('')
-        +(rest>0?`<button class="show-more-btn" onclick="fbShowCount+=3;renderStudentView()">▾ 더보기 (${rest}개 더)</button>`:'')
-        +(fbShowCount>3&&rest<=0?`<button class="show-more-btn" onclick="fbShowCount=3;renderStudentView()">▴ 접기</button>`:'');
-      })()}
+      ${shownFb.length?shownFb.map(f=>`<div class="item-row">
+        <div class="item-meta"><span class="badge ${CAT_CLASS[f.category?.split(',')[0]?.trim()]||'b-gray'}">${f.category||'기타'}</span><span class="item-date">${f.date}</span></div>
+        <div class="item-text">${f.text}</div>
+      </div>`).join(''):'<div style="font-size:13px;color:var(--text2);padding:4px 0">피드백이 없어요</div>'}
+      ${restFb>0?`<button class="show-more-btn" onclick="fbShowCount+=3;renderStudentProgress()">▾ 더보기 (${restFb}개 더)</button>`:''}
+      ${fbShowCount>3&&restFb<=0?`<button class="show-more-btn" onclick="fbShowCount=3;renderStudentProgress()">▴ 접기</button>`:''}
     </div>
-    <div class="card">
-      <div class="card-title">숙제</div>
-      ${[...hw].reverse().map((h,ri)=>{
-        const i=hw.length-1-ri;
-        const isOverdue=!h.done&&h.due&&new Date(h.due)<new Date();
-        const canCheck=!isOverdue;
-        return`<div class="hw-row" style="${isOverdue?'opacity:.6':''}">
-          <div class="hw-check ${h.done?'done':isOverdue?'':'hover-check'}"
-            onclick="${canCheck?`toggleMyHW(${i})`:`toast('마감일이 지난 숙제예요')`}"
-            style="${isOverdue?'cursor:not-allowed;border-color:#F7C1C1;background:var(--red-bg)':''}"
-          >${h.done?`<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#1A8A4A" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`:isOverdue?'✕':''}</div>
-          <div style="flex:1">
-            <div class="hw-title ${h.done?'hw-done-text':''}">${h.title}<span class="hw-tag ${h.type==='common'?'tag-c':'tag-p'}">${h.type==='common'?'공통':'개별'}</span></div>
-            ${h.due?`<div class="hw-due" style="${isOverdue?'color:var(--red);font-weight:700':''}">${isOverdue?'⚠️ 마감 지남':'마감'} ${h.due}${h.done?' · 완료':''}</div>`:''}
-          </div>
-        </div>`;
-      }).join('')||'<div style="font-size:13px;color:var(--text2)">숙제가 없어요</div>'}
-    </div>
-    <div class="card">
-      <div class="section-header">
-        <div class="card-title" style="margin:0">질문</div>
-        ${qs.length>0?`<span style="font-size:12px;color:var(--text2);font-weight:700">총 ${qs.length}개</span>`:''}
-      </div>
-      ${(()=>{
-        const qrev=[...qs].reverse();
-        if(!qrev.length)return '<div style="font-size:13px;color:var(--text2);padding:4px 0">질문이 없어요</div>';
-        const shown=qrev.slice(0,qShowCount);
-        const rest=qrev.length-qShowCount;
-        return shown.map(q=>`<div class="item-row">
-          <div class="item-meta"><span class="badge b-blue">질문</span><span class="item-date">${q.date}</span></div>
-          <div class="item-text">${q.text}</div>
-          ${q.reply?`<div class="q-reply">💬 ${q.reply}</div>`:`<div class="q-pending">⏳ 답변 대기 중</div>`}
-        </div>`).join('')
-        +(rest>0?`<button class="show-more-btn" onclick="qShowCount+=3;renderStudentView()">▾ 더보기 (${rest}개 더)</button>`:'')
-        +(qShowCount>3&&rest<=0?`<button class="show-more-btn" onclick="qShowCount=3;renderStudentView()">▴ 접기</button>`:'');
-      })()}
-      <div class="divider"></div>
-      <div class="fg"><textarea id="my-q-text" placeholder="선생님께 질문하세요..."></textarea></div>
-      <button class="btn btn-primary btn-full" onclick="submitMyQuestion()">질문 보내기</button>
-    </div>`;
+  </div>`;
 }
+
+function renderStudentHw(){
+  const m=myMember;if(!m)return;
+  const el=$('s-page-hw');if(!el)return;
+  const hw=m.homework||[];
+  const hwRev=[...hw].reverse();
+  const shownHw=hwRev.slice(0,hwShowCount);
+  const restHw=hwRev.length-hwShowCount;
+  const todayDate=new Date();
+  el.innerHTML=`<div style="padding:16px"><div class="card">
+    <div class="section-header">
+      <div class="card-title" style="margin:0">숙제</div>
+      ${hw.length?`<span style="font-size:12px;color:var(--text2);font-weight:700">완료 ${hw.filter(h=>h.done).length}/${hw.length}</span>`:''}
+    </div>
+    ${shownHw.length?shownHw.map((h,ri)=>{
+      const i=hw.length-1-ri;
+      const isOverdue=!h.done&&h.due&&new Date(h.due)<todayDate;
+      return`<div class="hw-row" style="${isOverdue?'opacity:.65':''}">
+        <div class="hw-check ${h.done?'done':''}"
+          onclick="${!isOverdue?`toggleMyHW(${i})`:`toast('마감일이 지난 숙제예요')`}"
+          style="${isOverdue?'cursor:not-allowed;border-color:#F7C1C1;background:var(--red-bg)':''}"
+        >${h.done?`<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#1A8A4A" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`:isOverdue?`<span style="font-size:10px;color:var(--red)">✕</span>`:''}</div>
+        <div style="flex:1">
+          <div class="hw-title ${h.done?'hw-done-text':''}">${h.title}<span class="hw-tag ${h.type==='common'?'tag-c':'tag-p'}">${h.type==='common'?'공통':'개별'}</span></div>
+          ${h.due?`<div class="hw-due" style="${isOverdue?'color:var(--red);font-weight:700':''}">${isOverdue?'⚠️ 마감 지남 ':'마감 '}${h.due}${h.done?' · 완료':''}</div>`:''}
+        </div>
+      </div>`;
+    }).join(''):'<div style="font-size:13px;color:var(--text2);padding:4px 0">숙제가 없어요</div>'}
+    ${restHw>0?`<button class="show-more-btn" onclick="hwShowCount+=3;renderStudentHw()">▾ 더보기 (${restHw}개 더)</button>`:''}
+    ${hwShowCount>3&&restHw<=0?`<button class="show-more-btn" onclick="hwShowCount=3;renderStudentHw()">▴ 접기</button>`:''}
+  </div></div>`;
+}
+
+function renderStudentQ(){
+  const m=myMember;if(!m)return;
+  const el=$('s-page-q');if(!el)return;
+  const qs=[...m.questions||[]].reverse();
+  const shownQ=qs.slice(0,qShowCount);
+  const restQ=qs.length-qShowCount;
+  el.innerHTML=`<div style="padding:16px"><div class="card">
+    <div class="section-header">
+      <div class="card-title" style="margin:0">질문</div>
+      ${qs.length?`<span style="font-size:12px;color:var(--text2);font-weight:700">총 ${qs.length}개</span>`:''}
+    </div>
+    ${shownQ.length?shownQ.map(q=>`<div class="item-row">
+      <div class="item-meta"><span class="badge b-blue">질문</span><span class="item-date">${q.date}</span></div>
+      <div class="item-text">${q.text}</div>
+      ${q.reply?`<div class="q-reply">💬 ${q.reply}</div>`:`<div class="q-pending">⏳ 답변 대기 중</div>`}
+    </div>`).join(''):'<div style="font-size:13px;color:var(--text2);padding:4px 0">질문이 없어요</div>'}
+    ${restQ>0?`<button class="show-more-btn" onclick="qShowCount+=3;renderStudentQ()">▾ 더보기 (${restQ}개 더)</button>`:''}
+    ${qShowCount>3&&restQ<=0?`<button class="show-more-btn" onclick="qShowCount=3;renderStudentQ()">▴ 접기</button>`:''}
+    <div class="divider"></div>
+    <div class="fg"><textarea id="my-q-text" placeholder="선생님께 질문하세요..."></textarea></div>
+    <button class="btn btn-primary btn-full" onclick="submitMyQuestion()">질문 보내기</button>
+  </div></div>`;
+}
+
+
 let sCalMonth=new Date().getMonth(),sCalYear=new Date().getFullYear();
-function changeStudentMonth(d){sCalMonth+=d;if(sCalMonth>11){sCalMonth=0;sCalYear++}if(sCalMonth<0){sCalMonth=11;sCalYear--}renderStudentView()}
+function changeStudentMonth(d){
+  sCalMonth+=d;
+  if(sCalMonth>11){sCalMonth=0;sCalYear++}
+  if(sCalMonth<0){sCalMonth=11;sCalYear--}
+  renderStudentStats();
+  renderStudentAtt();
+  // 현재 탭도 갱신
+  const activeTab=document.querySelector('#student-tab-nav .tab-item.on');
+  if(activeTab){
+    const tabId=activeTab.id.replace('stab-','');
+    if(tabId==='progress')renderStudentProgress();
+    if(tabId==='hw')renderStudentHw();
+  }
+}
 async function toggleMyHW(i){
   if(!myMember?.homework[i])return;
   const h=myMember.homework[i];
@@ -1260,7 +1364,7 @@ async function submitMyQuestion(){
   myMember.questions.push({date:new Date().toLocaleDateString('ko-KR'),text,reply:null});
   $('my-q-text').value='';
   await sb.from('academy_members').update({questions:myMember.questions}).eq('id',myMember.id);
-  renderStudentView();toast('질문을 보냈어요!');
+  renderStudentQ();renderStudentStats();toast('질문을 보냈어요!');
 }
 
 // ── ALERTS ───────────────────────────────────────────────────
