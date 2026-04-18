@@ -41,6 +41,33 @@ body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:var(--bg);co
 .page.np.on{display:block}
 
 /* ── BOTTOM NAV ── */
+/* ── CLASS GRID ── */
+.cls-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px}
+.cls-grid-card{background:var(--sf);border:2px solid var(--bd);border-radius:var(--r);padding:14px 12px;cursor:default;transition:all .15s;position:relative}
+.cls-grid-icon{width:44px;height:44px;border-radius:var(--rs);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:8px}
+.cls-grid-name{font-size:14px;font-weight:700;margin-bottom:2px;line-height:1.3}
+.cls-grid-cnt{font-size:12px;color:var(--tx2);margin-bottom:10px}
+.cls-grid-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
+.cls-grid-btn{padding:6px 0;border-radius:var(--rs);font-size:11px;font-weight:700;text-align:center;cursor:pointer;border:1.5px solid var(--bd);background:var(--bg);color:var(--tx2);transition:all .15s;font-family:inherit}
+.cls-grid-btn:active{transform:scale(.95)}
+.cls-grid-btn.att{border-color:var(--bl);color:var(--bld);background:var(--blb)}
+.cls-grid-btn.hw{border-color:var(--am);color:var(--am);background:var(--amb)}
+.cls-grid-btn.st{border-color:var(--gr);color:var(--gr);background:var(--grb)}
+.cls-edit-btn{position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:50%;background:var(--bg);border:1.5px solid var(--bd);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px}
+.cls-alert-row{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap}
+/* ── ATTENDANCE QUICK ── */
+.att-quick-item{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:2px solid var(--bd)}
+.att-quick-item:last-child{border-bottom:none}
+.att-quick-btns{display:flex;gap:6px}
+.att-q-btn{padding:6px 14px;border-radius:var(--rs);font-size:13px;font-weight:700;border:2px solid var(--bd);background:var(--bg);cursor:pointer;font-family:inherit;transition:all .15s}
+.att-q-btn.att{background:var(--blb);border-color:var(--bl);color:var(--bld)}
+.att-q-btn.abs{background:var(--rdb);border-color:var(--rd);color:var(--rd)}
+/* ── HW STATUS COMPACT ── */
+.hw-stat-mini{display:flex;gap:8px;margin-top:10px}
+.hw-names-done{flex:1;background:var(--grb);border:1.5px solid #9FE1CB;border-radius:var(--rs);padding:8px}
+.hw-names-undone{flex:1;background:var(--rdb);border:1.5px solid #F7C1C1;border-radius:var(--rs);padding:8px}
+.hw-name-item{font-size:12px;font-weight:700;padding:3px 0;border-bottom:1px solid rgba(0,0,0,.05)}
+.hw-name-item:last-child{border-bottom:none}
 .bnav{position:fixed;bottom:0;left:0;right:0;max-width:480px;margin:0 auto;background:var(--sf);border-top:2px solid var(--bd);display:flex;z-index:80}
 .bni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:9px 4px;cursor:pointer;color:var(--tx2);position:relative;font-size:10px;font-weight:700;gap:2px}
 .bni.on{color:var(--ac)}
@@ -312,7 +339,7 @@ input[type=range]{width:100%;accent-color:var(--tx)}
     <!-- 반 내부 페이지 -->
     <div class="page np" id="pg-class-inner">
       <div class="cls-hd">
-        <input type="text" placeholder="이름 검색..." id="class-search" oninput="renderClassInner(currentClass,this.value)" style="flex:1;margin:0">
+        <input type="text" placeholder="이름 검색..." id="class-search" oninput="if(classView==='students')renderClassStudents(currentClass,this.value)" style="flex:1;margin:0">
         <span id="class-inner-cnt" style="font-size:13px;color:var(--tx2);font-weight:700;flex-shrink:0;margin-left:8px"></span>
       </div>
       <div id="class-inner-list" style="padding:12px 16px"></div>
@@ -400,7 +427,7 @@ let user=null,academy=null,myMember=null;
 let members=[],classes=[],clsMems=[],msgHistory=[];
 let calY=new Date().getFullYear(),calM=new Date().getMonth();
 let sCalY=new Date().getFullYear(),sCalM=new Date().getMonth();
-let currentClass=null,currentMemberId=null;
+let currentClass=null,currentMemberId=null,classView='home';
 let hwMode='personal',hwSel=new Set();
 let fbN=3,qN=3,hwN=3,lastFbCnt=0;
 let authMode='login',selRole='owner';
@@ -524,7 +551,8 @@ function switchPage(page){
   $('bni-'+page)?.classList.add('on');
   $('back-btn').style.display='none';
   $('app-title').textContent=academy?.name||'학원관리';
-  currentClass=null;currentMemberId=null;
+  currentClass=null;currentMemberId=null;classView='home';
+  if($('class-search'))$('class-search').style.display='';
   $('fab').style.display=page==='classes'?'':'none';
   if(page==='classes')renderClasses();
   if(page==='alerts')renderAlerts();
@@ -536,10 +564,15 @@ function switchPage(page){
 function goBack(){
   if(currentMemberId){
     currentMemberId=null;
-    if(currentClass){openClassInner(currentClass);}
-    else{switchPage('classes');}
+    if(currentClass){
+      // 어디서 왔는지에 따라 다르게
+      if(classView==='students')openClassStudents(currentClass);
+      else switchPage('classes');
+    } else {switchPage('classes');}
   } else if(currentClass){
     currentClass=null;switchPage('classes');
+    // class-search 다시 보이기
+    if($('class-search'))$('class-search').style.display='';
   } else {switchPage('classes');}
 }
 
@@ -550,10 +583,10 @@ function renderClasses(){
   const pending=members.filter(m=>m.status==='pending');
   const el=$('classes-list');
 
-  // 승인대기 섹션
   let html='';
+  // 승인대기 배너
   if(pending.length){
-    html+=`<div style="background:var(--amb);border:2px solid #FED7AA;border-radius:var(--r);padding:12px 14px;margin-bottom:12px;cursor:pointer" onclick="switchPage('alerts')">
+    html+=`<div style="background:var(--amb);border:2px solid #FED7AA;border-radius:var(--r);padding:11px 14px;margin-bottom:4px;cursor:pointer" onclick="switchPage('alerts')">
       <div style="font-size:13px;font-weight:700;color:var(--am)">🔔 가입 승인 대기 ${pending.length}명</div>
       <div style="font-size:12px;color:var(--am);margin-top:2px">${pending.map(m=>m.name||m.email).join(', ')}</div>
     </div>`;
@@ -567,58 +600,256 @@ function renderClasses(){
     else mCls.forEach(cn=>{if(!grouped[cn])grouped[cn]=[];grouped[cn].push(m)});
   });
 
-  if(!approved.length&&!pending.length){el.innerHTML='<div class="empty">학생이 없어요<br>+ 버튼으로 추가하거나<br>알림에서 가입 승인을 해주세요</div>';return}
+  if(!approved.length&&!pending.length){
+    el.innerHTML=`<div class="empty" style="padding:30px">학생이 없어요<br>+ 버튼으로 추가하거나<br>알림에서 가입 승인을 해주세요</div>`;
+    return;
+  }
 
   const order=[...classes.map(c=>c.name),'미배정'];
-  order.forEach((cn,i)=>{
+  // 2열 그리드로 묶기
+  const cards=[];
+  order.forEach((cn,idx)=>{
     if(!grouped[cn]?.length)return;
     const g=grouped[cn];
     const filtered=q?g.filter(m=>(m.name||'').toLowerCase().includes(q)||(m.email||'').includes(q)):g;
     if(!filtered.length)return;
-    const col=CLS_COLORS[i%CLS_COLORS.length];
-    const emoji=CLS_EMOJI[i%CLS_EMOJI.length];
+    const col=CLS_COLORS[idx%CLS_COLORS.length];
+    const emoji=CLS_EMOJI[idx%CLS_EMOJI.length];
     const undone=g.reduce((s,m)=>s+(m.homework||[]).filter(h=>!h.done).length,0);
     const unanswered=g.reduce((s,m)=>s+(m.questions||[]).filter(q=>!q.reply).length,0);
+    const isMissing=cn==='미배정';
+    const clsObj=classes.find(c=>c.name===cn);
     const alerts=[];
     if(undone>0)alerts.push(`<span class="badge bam" style="font-size:10px">숙제 ${undone}</span>`);
     if(unanswered>0)alerts.push(`<span class="badge brd" style="font-size:10px">질문 ${unanswered}</span>`);
-    html+=`<div class="cls-card" onclick="openClassInner('${cn}')">
-      <div class="cls-icon" style="background:${col.bg}"><span style="color:${col.ic}">${emoji}</span></div>
-      <div style="flex:1;min-width:0">
-        <div class="cls-name">${cn}</div>
-        <div class="cls-cnt">${filtered.length}명</div>
-        ${alerts.length?`<div style="display:flex;gap:4px;margin-top:5px">${alerts.join('')}</div>`:''}
+
+    cards.push(`<div class="cls-grid-card">
+      ${!isMissing&&clsObj?`<div class="cls-edit-btn" onclick="openEditClass('${clsObj.id}','${clsObj.name.replace(/'/g,"\'")}')">✏️</div>`:''}
+      <div class="cls-grid-icon" style="background:${col.bg}"><span style="color:${col.ic}">${emoji}</span></div>
+      <div class="cls-grid-name">${cn}</div>
+      <div class="cls-grid-cnt">${g.length}명</div>
+      ${alerts.length?`<div class="cls-alert-row">${alerts.join('')}</div>`:''}
+      <div class="cls-grid-btns">
+        <button class="cls-grid-btn att" onclick="openClassAtt('${cn}')">📅 출석</button>
+        <button class="cls-grid-btn hw" onclick="openClassHw('${cn}')">📝 숙제</button>
+        <button class="cls-grid-btn st" onclick="openClassStudents('${cn}')">👥 학생</button>
       </div>
-      <div style="font-size:20px;color:var(--tx3)">›</div>
-    </div>`;
+    </div>`);
   });
-  el.innerHTML=html;
+
+  // 2열 배치
+  let gridHtml='<div class="cls-grid">';
+  cards.forEach(c=>gridHtml+=c);
+  gridHtml+='</div>';
+
+  // 반 추가 버튼
+  gridHtml+=`<div style="padding:0 16px 16px">
+    <button class="btn bts btf" style="border-style:dashed;color:var(--tx2)" onclick="openAddClass()">+ 새 반 추가</button>
+  </div>`;
+
+  el.innerHTML=html+gridHtml;
 }
 
+
 function openClassInner(className){
-  currentClass=className;
+  // 이 함수는 더 이상 직접 호출 안됨 (하위 버튼으로 분리)
+  openClassStudents(className);
+}
+
+function _openClassPage(className, view){
+  currentClass=className;classView=view;
   document.querySelectorAll('#app .page').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.bni').forEach(n=>n.classList.remove('on'));
   $('pg-class-inner').classList.add('on');
   $('back-btn').style.display='flex';
-  $('app-title').textContent=className;
   $('fab').style.display='';
-  $('class-search').value='';
-  renderClassInner(className,'');
 }
 
-function renderClassInner(className,q){
+function openClassStudents(className){
+  _openClassPage(className,'students');
+  const g=_getClassMembers(className);
+  $('app-title').textContent=`${className} · 학생`;
+  $('class-search').value='';
+  $('class-inner-cnt').textContent=g.length+'명';
+  renderClassStudents(className,'');
+}
+
+function openClassAtt(className){
+  _openClassPage(className,'att');
+  $('app-title').textContent=`${className} · 출석`;
+  $('fab').style.display='none';
+  renderClassAttPage(className);
+}
+
+function openClassHw(className){
+  _openClassPage(className,'hw');
+  $('app-title').textContent=`${className} · 숙제`;
+  $('fab').style.display='none';
+  renderClassHwPage(className);
+}
+
+function _getClassMembers(className){
   const approved=members.filter(m=>m.status==='approved');
-  const list=approved.filter(m=>{
+  return approved.filter(m=>{
     const mCls=clsMems.filter(cm=>cm.member_id===m.id).map(cm=>classes.find(c=>c.id===cm.class_id)?.name).filter(Boolean);
-    const inCls=className==='미배정'?!mCls.length:mCls.includes(className);
-    if(!inCls)return false;
+    return className==='미배정'?!mCls.length:mCls.includes(className);
+  });
+}
+
+
+function renderClassStudents(className,q){
+  const list=_getClassMembers(className).filter(m=>{
     if(!q)return true;
     return (m.name||'').toLowerCase().includes(q)||(m.email||'').includes(q);
   });
   $('class-inner-cnt').textContent=list.length+'명';
   $('class-inner-list').innerHTML=list.length?list.map((m,i)=>makeSCard(m,i)).join(''):'<div class="empty">검색 결과가 없어요</div>';
 }
+
+function renderClassInner(className,q){renderClassStudents(className,q)}
+
+// ── 출석 빠른 체크 페이지 ──
+function renderClassAttPage(className){
+  const list=_getClassMembers(className);
+  const ts=todayStr();
+  const MS=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+  let html=`<div style="padding:16px">
+    <div class="card">
+      <div class="sec-hd">
+        <div class="card-title" style="margin:0">📅 오늘 출석 체크</div>
+        <span style="font-size:12px;color:var(--tx2);font-weight:700">${new Date().getMonth()+1}월 ${new Date().getDate()}일</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn bts" style="background:var(--blb);border-color:var(--bl);color:var(--bld);flex:1" onclick="attAllClass('${className}','attended')">✓ 전체 출석</button>
+        <button class="btn bts" style="background:var(--rdb);border-color:var(--rd);color:var(--rd);flex:1" onclick="attAllClass('${className}','absent')">✗ 전체 결석</button>
+      </div>
+      ${list.map(m=>{
+        const att=m.attendance||[];
+        const rec=att.find(a=>a.date===ts);
+        return`<div class="att-quick-item">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div class="av ${avC(list.indexOf(m))}" style="width:36px;height:36px;font-size:12px">${(m.name||'?').slice(0,2)}</div>
+            <span style="font-size:14px;font-weight:700">${m.name||m.email}</span>
+          </div>
+          <div class="att-quick-btns">
+            <button class="att-q-btn ${rec?.status==='attended'?'att':''}" onclick="quickAtt('${m.id}','attended','${className}')">출석</button>
+            <button class="att-q-btn ${rec?.status==='absent'?'abs':''}" onclick="quickAtt('${m.id}','absent','${className}')">결석</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+  $('class-inner-list').innerHTML=html;
+  $('class-search').style.display='none';
+  $('class-inner-cnt').textContent='';
+}
+
+async function quickAtt(mid,status,className){
+  const m=members.find(x=>x.id===mid);if(!m)return;
+  const ts=todayStr();
+  if(!m.attendance)m.attendance=[];
+  const i=m.attendance.findIndex(a=>a.date===ts);
+  if(i===-1)m.attendance.push({date:ts,status});
+  else if(m.attendance[i].status===status)m.attendance.splice(i,1); // 토글 (같은거 누르면 취소)
+  else m.attendance[i].status=status;
+  await sb.from('academy_members').update({attendance:m.attendance}).eq('id',mid);
+  renderClassAttPage(className);
+}
+
+async function attAllClass(className,status){
+  const list=_getClassMembers(className);
+  const ts=todayStr();
+  for(const m of list){
+    if(!m.attendance)m.attendance=[];
+    const i=m.attendance.findIndex(a=>a.date===ts);
+    if(i===-1)m.attendance.push({date:ts,status});
+    else m.attendance[i].status=status;
+    await sb.from('academy_members').update({attendance:m.attendance}).eq('id',m.id);
+  }
+  renderClassAttPage(className);toast(`전체 ${status==='attended'?'출석':'결석'} 처리됐어요`);
+}
+
+// ── 숙제 페이지 (내기 + 현황) ──
+let hwPageTab='give';
+function renderClassHwPage(className){
+  const list=_getClassMembers(className);
+  // 탭 (숙제내기 / 숙제현황)
+  let html=`<div style="padding:0 16px 16px">
+    <div class="seg" style="margin-top:16px" id="hw-page-seg">
+      <div class="seg-b ${hwPageTab==='give'?'on':''}" onclick="hwPageTab='give';renderClassHwPage('${className}')">📝 숙제 내기</div>
+      <div class="seg-b ${hwPageTab==='status'?'on':''}" onclick="hwPageTab='status';renderClassHwPage('${className}')">📋 현황 확인</div>
+    </div>`;
+
+  if(hwPageTab==='give'){
+    html+=`<div class="card">
+      <div class="card-title">📝 ${className}에 숙제 내기</div>
+      <div class="fg"><label class="fl">숙제 내용</label><input type="text" id="cls-hw-title" placeholder="숙제 내용을 입력하세요"></div>
+      <div class="fg"><label class="fl">마감일</label><input type="date" id="cls-hw-due" value="${new Date().toISOString().split('T')[0]}"></div>
+      <div style="font-size:13px;color:var(--tx2);margin-bottom:10px">👥 ${list.length}명 모두에게 공통 숙제로 추가됩니다</div>
+      <button class="btn btp btf" onclick="giveHwToClass('${className}')">숙제 내기</button>
+    </div>`;
+  } else {
+    // 현황 확인
+    const hwTitles=new Map();
+    list.forEach(m=>(m.homework||[]).forEach(h=>{if(!hwTitles.has(h.title))hwTitles.set(h.title,h.due||'')}));
+
+    html+=`<div class="card">
+      <div class="card-title">📋 ${className} 숙제 현황</div>
+      ${hwTitles.size?`<div class="fg">
+        <select id="cls-hw-sel" onchange="renderClsHwStat('${className}')">
+          <option value="">-- 숙제 선택 --</option>
+          ${[...hwTitles.entries()].map(([t,d])=>`<option value="${t}">${t}${d?' (마감: '+d+')':''}</option>`).join('')}
+        </select>
+      </div>
+      <div id="cls-hw-stat-result"></div>`
+      :'<div style="font-size:13px;color:var(--tx2);padding:4px 0">아직 숙제가 없어요</div>'}
+    </div>`;
+  }
+  html+='</div>';
+  $('class-inner-list').innerHTML=html;
+  $('class-search').style.display='none';
+  $('class-inner-cnt').textContent='';
+}
+
+function renderClsHwStat(className){
+  const el=$('cls-hw-stat-result');if(!el)return;
+  const title=$('cls-hw-sel')?.value;if(!title){el.innerHTML='';return}
+  const list=_getClassMembers(className);
+  const done=[],undone=[];
+  list.forEach(m=>{const h=(m.homework||[]).find(h=>h.title===title);if(h&&h.done)done.push(m);else undone.push(m)});
+  const rate=list.length?Math.round(done.length/list.length*100):0;
+  el.innerHTML=`<div style="text-align:center;padding:8px 0 4px">
+    <span style="font-size:26px;font-weight:700;color:${rate>=80?'var(--gr)':rate>=50?'var(--am)':'var(--rd)'}">${rate}%</span>
+    <span style="font-size:12px;color:var(--tx2);margin-left:6px">${done.length}/${list.length}명</span>
+  </div>
+  <div class="hw-stat-mini">
+    <div class="hw-names-done">
+      <div style="font-size:12px;font-weight:700;color:var(--gr);margin-bottom:6px">✅ 완료 ${done.length}</div>
+      ${done.map(m=>`<div class="hw-name-item" style="color:var(--gr)">${m.name||m.email}</div>`).join('')||'<div style="font-size:11px;color:var(--tx2)">없음</div>'}
+    </div>
+    <div class="hw-names-undone">
+      <div style="font-size:12px;font-weight:700;color:var(--rd);margin-bottom:6px">⬜ 미완료 ${undone.length}</div>
+      ${undone.map(m=>`<div class="hw-name-item" style="color:var(--rd)">${m.name||m.email}</div>`).join('')||'<div style="font-size:11px;color:var(--tx2)">없음</div>'}
+    </div>
+  </div>`;
+}
+
+async function giveHwToClass(className){
+  const title=$('cls-hw-title')?.value.trim();if(!title){toast('숙제 내용을 입력하세요');return}
+  const due=$('cls-hw-due')?.value;
+  const list=_getClassMembers(className);
+  for(const m of list){
+    if(!m.homework)m.homework=[];
+    m.homework.push({title,due,done:false,type:'common'});
+    await sb.from('academy_members').update({homework:m.homework}).eq('id',m.id);
+  }
+  toast(`${list.length}명에게 숙제를 냈어요!`);
+  $('cls-hw-title').value='';
+  hwPageTab='status';
+  renderClassHwPage(className);
+  updateBadges();
+}
+
 
 function makeSCard(m,i){
   const att=m.attendance||[];
@@ -998,38 +1229,71 @@ async function delMember(id){
 function updateBadges(){
   const pending=members.filter(m=>m.status==='pending').length;
   const unanswered=members.filter(m=>m.status==='approved').reduce((s,m)=>s+(m.questions||[]).filter(q=>!q.reply).length,0);
-  const total=pending+unanswered;
+  const ts=todayStr();
+  const now=new Date();
+  const lateDue=now.getHours()>=23?members.filter(m=>m.status==='approved').reduce((s,m)=>s+(m.homework||[]).filter(h=>!h.done&&h.due===ts).length,0):0;
+  const total=pending+unanswered+lateDue;
   const bdg=$('bdg-alerts');
-  if(bdg){bdg.textContent=total;bdg.classList.toggle('on',total>0)}
+  if(bdg){bdg.textContent=total>9?'9+':total;bdg.classList.toggle('on',total>0)}
 }
 
 // ── ALERTS PAGE ─────────────────────────────────────────────────
+let alertTab='hw'; // 'hw' | 'q' | 'pending'
 function renderAlerts(){
   const el=$('pg-alerts');if(!el)return;
   const pending=members.filter(m=>m.status==='pending');
   const approved=members.filter(m=>m.status==='approved');
-  const today=new Date().toLocaleDateString('ko-KR');
+  const now=new Date();
+  const ts=todayStr();
+  const isPastDeadline=now.getHours()>=23; // 오후 11시 이후
 
-  // 알림 목록 빌드
-  const items=[];
-  pending.forEach(m=>items.push({type:'pending',icon:'👤',text:`${m.name||m.email}님이 가입 신청했어요`,sub:m.email,time:m.created_at,memberId:m.id,isNew:true}));
+  // 미제출 (오늘 마감인데 미완료, 11시 이후면 알림)
+  const lateItems=[];
   approved.forEach(m=>{
-    (m.questions||[]).forEach((q,i)=>{
-      if(!q.reply)items.push({type:'q',icon:'❓',text:`${m.name||m.email}님이 질문을 남겼어요`,sub:q.text.length>40?q.text.slice(0,40)+'...':q.text,time:q.date,memberId:m.id,isNew:true});
-    });
     (m.homework||[]).forEach(h=>{
-      if(h.done&&h.doneDate===today)items.push({type:'hw',icon:'✅',text:`${m.name||m.email}님이 숙제를 완료했어요`,sub:h.title,time:today,memberId:m.id,isNew:true});
-    });
-    (m.homework||[]).forEach(h=>{
-      if(!h.done&&h.due&&new Date(h.due)<new Date())
-        items.push({type:'late',icon:'⚠️',text:`${m.name||m.email}님 숙제 마감 지남`,sub:`${h.title} (마감: ${h.due})`,time:h.due,memberId:m.id,isNew:false});
+      if(!h.done&&h.due===ts){
+        const mCls=clsMems.filter(cm=>cm.member_id===m.id).map(cm=>classes.find(c=>c.id===cm.class_id)?.name).filter(Boolean);
+        lateItems.push({m,h,cls:mCls.join(', ')||'미배정'});
+      }
     });
   });
 
-  // 승인대기 섹션 + 알림 목록
-  const pendSection=pending.length?`<div style="margin-bottom:12px">
-    <div style="font-size:12px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">승인 대기</div>
-    ${pending.map(m=>`<div class="pend-card">
+  // 미답변 질문
+  const qItems=[];
+  approved.forEach(m=>{
+    (m.questions||[]).forEach((q,i)=>{
+      if(!q.reply){
+        const mCls=clsMems.filter(cm=>cm.member_id===m.id).map(cm=>classes.find(c=>c.id===cm.class_id)?.name).filter(Boolean);
+        qItems.push({m,q,i,cls:mCls.join(', ')||'미배정'});
+      }
+    });
+  });
+
+  // 승인대기 수
+  const pendingCnt=pending.length;
+  const hwAlert=lateItems.length;
+  const qAlert=qItems.length;
+
+  // 탭 버튼
+  el.innerHTML=`
+    <div style="display:flex;gap:8px;padding:16px 16px 0">
+      <button class="btn bts ${alertTab==='pending'?'btp':''}" style="flex:1;position:relative" onclick="alertTab='pending';renderAlerts()">
+        👤 대기 ${pendingCnt>0?`<span style="background:var(--am);color:#fff;border-radius:10px;font-size:10px;padding:1px 5px;margin-left:4px">${pendingCnt}</span>`:''}
+      </button>
+      <button class="btn bts ${alertTab==='hw'?'btp':''}" style="flex:1" onclick="alertTab='hw';renderAlerts()">
+        📝 숙제 ${hwAlert>0?`<span style="background:var(--rd);color:#fff;border-radius:10px;font-size:10px;padding:1px 5px;margin-left:4px">${hwAlert}</span>`:''}
+      </button>
+      <button class="btn bts ${alertTab==='q'?'btp':''}" style="flex:1" onclick="alertTab='q';renderAlerts()">
+        ❓ 질문 ${qAlert>0?`<span style="background:var(--rd);color:#fff;border-radius:10px;font-size:10px;padding:1px 5px;margin-left:4px">${qAlert}</span>`:''}
+      </button>
+    </div>
+    <div style="padding:12px 16px" id="alert-content"></div>`;
+
+  const ac=$('alert-content');if(!ac)return;
+
+  if(alertTab==='pending'){
+    if(!pending.length){ac.innerHTML='<div class="empty">승인 대기 학생이 없어요</div>';return}
+    ac.innerHTML=pending.map(m=>`<div class="pend-card">
       <div class="sr" style="margin-bottom:10px">
         <div class="av" style="background:var(--amb);color:var(--am);border-color:var(--am)">${(m.name||'?').slice(0,2)}</div>
         <div style="flex:1"><div class="sn">${m.name||'이름 미설정'}</div><div class="sm">${m.email}</div><div class="sm">${[m.level,m.goal].filter(Boolean).join(' · ')}</div></div>
@@ -1038,26 +1302,80 @@ function renderAlerts(){
         <button class="apbtn" style="flex:1" onclick="approveMem('${m.id}')">✓ 승인</button>
         <button class="rjbtn" style="flex:1" onclick="rejectMem('${m.id}')">✕ 거절</button>
       </div>
-    </div>`).join('')}
-  </div>`:'';
+    </div>`).join('');
+  }
 
-  const alertSection=items.filter(a=>a.type!=='pending').length?`<div>
-    <div style="font-size:12px;font-weight:700;color:var(--tx2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">활동 알림</div>
-    ${items.filter(a=>a.type!=='pending').map(a=>`<div class="al-item ${a.isNew?'new':''}" onclick="openDetail('${a.memberId}')">
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <span style="font-size:18px;flex-shrink:0">${a.icon}</span>
-        <div style="flex:1;min-width:0">
-          <div class="al-txt">${a.text}</div>
-          <div class="al-sub">${a.sub}</div>
-          <div class="al-time">${a.time}</div>
+  if(alertTab==='hw'){
+    let html='';
+    // 오늘 마감 미제출 (★ 핵심 알림)
+    if(lateItems.length){
+      html+=`<div style="background:var(--rdb);border:2px solid var(--rd);border-radius:var(--r);padding:13px;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:700;color:var(--rd);margin-bottom:8px">⚠️ 오늘 마감 미제출 ${lateItems.length}명${isPastDeadline?' (오후 11시 초과!)':' (오늘 마감)'}</div>
+        ${lateItems.map(({m,h,cls})=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(204,34,34,.2)">
+          <div>
+            <span style="font-size:13px;font-weight:700">${m.name||m.email}</span>
+            <span style="font-size:11px;color:var(--tx2);margin-left:6px">${cls}</span>
+          </div>
+          <span style="font-size:11px;color:var(--rd);font-weight:700">${h.title}</span>
+        </div>`).join('')}
+      </div>`;
+    }
+    // 전체 미완료 목록
+    const allUndone=[];
+    approved.forEach(m=>{
+      (m.homework||[]).forEach(h=>{
+        if(!h.done){
+          const mCls=clsMems.filter(cm=>cm.member_id===m.id).map(cm=>classes.find(c=>c.id===cm.class_id)?.name).filter(Boolean);
+          allUndone.push({m,h,cls:mCls.join(', ')||'미배정'});
+        }
+      });
+    });
+    if(allUndone.length){
+      html+=`<div class="card">
+        <div class="card-title">전체 미완료 숙제 (${allUndone.length}건)</div>
+        ${allUndone.map(({m,h,cls})=>`<div class="irow" style="cursor:pointer" onclick="openDetail('${m.id}')">
+          <div class="imeta">
+            <span class="badge bam" style="font-size:10px">${cls}</span>
+            <span class="idate">${h.due?'마감 '+h.due:''}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px">
+            <span style="font-size:13px;font-weight:700">${m.name||m.email}</span>
+            <span style="font-size:12px;color:var(--tx2)">${h.title}</span>
+          </div>
+        </div>`).join('')}
+      </div>`;
+    }
+    if(!html)html='<div class="empty">미완료 숙제가 없어요 🎉</div>';
+    ac.innerHTML=html;
+  }
+
+  if(alertTab==='q'){
+    if(!qItems.length){ac.innerHTML='<div class="empty">미답변 질문이 없어요 🎉</div>';return}
+    ac.innerHTML=`<div class="card">
+      <div class="card-title">미답변 질문 ${qItems.length}개</div>
+      ${qItems.map(({m,q,i,cls})=>`<div class="irow">
+        <div class="imeta">
+          <span class="badge bbl">${m.name||m.email} · ${cls}</span>
+          <span class="idate">${q.date}</span>
         </div>
-        <span class="badge ${a.type==='q'?'brd':a.type==='hw'?'bgr':'bam'}" style="font-size:10px;flex-shrink:0">${a.type==='q'?'질문':a.type==='hw'?'완료':'미완료'}</span>
-      </div>
-    </div>`).join('')}
-  </div>`:'';
-
-  el.innerHTML=pendSection||alertSection?pendSection+alertSection:'<div class="empty">새로운 알림이 없어요 🎉</div>';
+        <div class="itxt">${q.text}</div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <input type="text" id="aq-${m.id}-${i}" placeholder="답변 입력..." style="flex:1">
+          <button class="btn bts btp" onclick="replyQFromAlert('${m.id}',${i})">답변</button>
+        </div>
+      </div>`).join('')}
+    </div>`;
+  }
 }
+
+async function replyQFromAlert(mid,i){
+  const reply=$('aq-'+mid+'-'+i)?.value.trim();if(!reply){toast('답변을 입력하세요');return}
+  const m=members.find(x=>x.id===mid);if(!m)return;
+  m.questions[i].reply=reply;m.questions[i].replyDate=new Date().toLocaleDateString('ko-KR');
+  await sb.from('academy_members').update({questions:m.questions}).eq('id',mid);
+  renderAlerts();updateBadges();toast('답변을 보냈어요!');
+}
+
 
 async function approveMem(id){
   await sb.from('academy_members').update({status:'approved'}).eq('id',id);
@@ -1075,8 +1393,6 @@ async function rejectMem(id){
 function renderNotice(){
   const el=$('pg-notice');if(!el)return;
   const approved=members.filter(m=>m.status==='approved');
-  const hwTitles=new Map();
-  approved.forEach(m=>(m.homework||[]).forEach(h=>{if(!hwTitles.has(h.title))hwTitles.set(h.title,h.due||'')}));
 
   el.innerHTML=`
     <div class="card">
@@ -1091,16 +1407,7 @@ function renderNotice(){
       <div class="fg"><textarea id="msg-content" placeholder="공지 내용..." style="min-height:90px"></textarea></div>
       <button class="btn btp btf" onclick="sendMsg()">📨 보내기</button>
     </div>
-    <div class="card">
-      <div class="card-title">📋 숙제 완료 현황</div>
-      <div class="fg">
-        <select id="hw-sel" onchange="renderHwStat()">
-          <option value="">-- 숙제 선택 --</option>
-          ${[...hwTitles.entries()].map(([title,due])=>`<option value="${title}">${title}${due?' (마감: '+due+')':''}</option>`).join('')}
-        </select>
-      </div>
-      <div id="hw-stat"></div>
-    </div>
+
     <div class="card">
       <div class="card-title">보낸 공지</div>
       ${msgHistory.length?msgHistory.slice(0,10).map(m=>{
@@ -1170,28 +1477,15 @@ function renderSettings(){
   const unassigned=approved.filter(m=>!clsMems.some(cm=>cm.member_id===m.id));
   el.innerHTML=`<div>
     <div class="set-g">
-      <div class="set-lbl">반 관리</div>
-      ${classes.map(c=>`<div class="set-item">
-        <div><div class="set-title">${c.name}</div><div class="set-sub">${clsMems.filter(cm=>cm.class_id===c.id).length}명</div></div>
-        <div style="display:flex;gap:6px">
-          <button class="btn bts" onclick="openEditClass('${c.id}','${c.name.replace(/'/g,"\\'")}')">수정</button>
-          <button class="btn bts btd" onclick="delClass('${c.id}')">삭제</button>
-        </div>
-      </div>`).join('')}
-      <div class="card" style="margin-top:8px">
-        <div class="fg"><label class="fl">새 반 이름</label><input type="text" id="new-cls" placeholder="예: 월수금 초급반"></div>
-        <button class="btn btp btf" onclick="addClass()">반 추가</button>
-      </div>
-    </div>
-    <div class="set-g">
       <div class="set-lbl">미배정 학생 (${unassigned.length}명)</div>
       ${unassigned.length?unassigned.map(m=>`<div class="set-item">
         <div><div class="set-title">${m.name||m.email}</div><div class="set-sub">${m.level||''} ${m.goal?'· '+m.goal:''}</div></div>
-        <button class="btn bts btp" onclick="openAssignClass('${m.id}')">배정</button>
+        <button class="btn bts btp" onclick="openAssignClass('${m.id}')">반 배정</button>
       </div>`).join(''):'<div style="padding:12px;font-size:13px;color:var(--gr);font-weight:700;background:var(--grb);border-radius:var(--rs);border:2px solid #9FE1CB">✓ 모든 학생이 반에 배정됐어요</div>'}
     </div>
   </div>`;
 }
+
 
 async function addClass(){
   const name=($('new-cls')?.value||'').trim();if(!name){toast('반 이름을 입력하세요');return}
