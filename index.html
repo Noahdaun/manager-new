@@ -316,6 +316,8 @@ input[type=range]{width:100%;accent-color:var(--text)}
     <div class="page" id="page-alerts"></div>
     <!-- 반 내부 페이지 -->
     <div class="page" id="page-class"></div>
+    <!-- 메시지 페이지 -->
+    <div class="page" id="page-messages"></div>
     <!-- 설정 페이지 -->
     <div class="page" id="page-settings"></div>
   </div>
@@ -330,6 +332,9 @@ input[type=range]{width:100%;accent-color:var(--text)}
     <div class="nav-item" id="nav-alerts" onclick="switchPage('alerts')">
       <span class="nav-icon">🔔</span>알림
       <span class="nav-badge" id="badge-alerts">0</span>
+    </div>
+    <div class="nav-item" id="nav-messages" onclick="switchPage('messages')">
+      <span class="nav-icon">📢</span>공지
     </div>
     <div class="nav-item" id="nav-settings" onclick="switchPage('settings')">
       <span class="nav-icon">⚙️</span>설정
@@ -367,12 +372,14 @@ input[type=range]{width:100%;accent-color:var(--text)}
     <div class="tab-item" id="stab-progress" onclick="showStudentTab('progress')">📊 진행도</div>
     <div class="tab-item" id="stab-hw" onclick="showStudentTab('hw')">📝 숙제</div>
     <div class="tab-item" id="stab-q" onclick="showStudentTab('q')">❓ 질문</div>
+    <div class="tab-item" id="stab-notice" onclick="showStudentTab('notice')">📢 공지</div>
   </div>
   <div class="content">
     <div class="page on" id="s-page-att"></div>
     <div class="page" id="s-page-progress"></div>
     <div class="page" id="s-page-hw"></div>
     <div class="page" id="s-page-q"></div>
+    <div class="page" id="s-page-notice"></div>
   </div>
 </div>
 
@@ -396,6 +403,7 @@ let members=[],classes=[],classMemberships=[];
 let calMonth=new Date().getMonth(),calYear=new Date().getFullYear();
 let currentMemberId=null,hwMode='personal',hwSel=new Set();
 let authMode='login',selectedRole='owner';
+let msgHistory=[];
 let fbShowCount=3,qShowCount=3,hwShowCount=3;
 let lastFbCount=0;
 
@@ -464,7 +472,7 @@ async function doAuth(){
         academy_id:aId,user_id:data.user.id,email,name:sName,
         phone:($('s-phone').value||'').trim(),
         level:$('s-level').value,goal:($('s-goal').value||'').trim(),
-        status:'pending',attendance:[],feedback:[],homework:[],progress:{},questions:[]
+        status:'pending',attendance:[],feedback:[],homework:[],progress:{},questions:[],announcements:[]
       });
       enterApp(data.user);
     }
@@ -515,6 +523,7 @@ async function loadAll(){
   ]);
   members=mRes.data||[];classes=cRes.data||[];classMemberships=cmRes.data||[];
   renderList();updateBadges();renderSettings();buildAlerts();
+  loadMessages();
 }
 
 // ── PAGE SWITCHING ─────────────────────────────────────────────
@@ -529,6 +538,7 @@ function switchPage(page){
   if(page==='list')renderList();
   if(page==='pending')renderPending();
   if(page==='alerts')renderAlerts();
+  if(page==='messages')renderMessages();
   if(page==='settings')renderSettings();
 }
 
@@ -1026,7 +1036,7 @@ async function saveMember(id){
   } else {
     const {data}=await sb.from('academy_members').insert({
       academy_id:academy.id,user_id:user.id,status:'approved',
-      ...d,attendance:[],feedback:[],homework:[],progress:{},questions:[]
+      ...d,attendance:[],feedback:[],homework:[],progress:{},questions:[],announcements:[]
     }).select().single();
     if(data)members.push(data);
     closeModal();renderList();
@@ -1138,6 +1148,12 @@ function showStudentApp(){
   $('student-title').textContent=m.academies?.name||'내 학습';
   $('student-sub').textContent=m.name||user.email;
   fbShowCount=3;qShowCount=3;hwShowCount=3;
+  // 공지 뱃지
+  const unreadNotice=(myMember.announcements||[]).filter(n=>!n.read).length;
+  if(unreadNotice>0){
+    const noticeTab=$('stab-notice');
+    if(noticeTab)noticeTab.innerHTML=`📢 공지 <span style="background:var(--accent);color:#fff;border-radius:10px;font-size:10px;padding:1px 5px">${unreadNotice}</span>`;
+  }
   lastFbCount=(myMember.feedback||[]).length;
   $('app-student').classList.add('on');
   // 탭 초기화
@@ -1157,6 +1173,7 @@ function showStudentTab(tab){
   if(tab==='progress')renderStudentProgress();
   if(tab==='hw')renderStudentHw();
   if(tab==='q')renderStudentQ();
+  if(tab==='notice')renderStudentNotice();
 }
 
 function renderStudentStats(){
@@ -1185,6 +1202,37 @@ function renderStudentStats(){
       </div>
       <div class="stat"><div class="stat-v">${(m.questions||[]).filter(q=>!q.reply).length}</div><div class="stat-l">미답변</div></div>
     </div>`;
+}
+
+function renderStudentNotice(){
+  const m=myMember;if(!m)return;
+  const el=$('s-page-notice');if(!el)return;
+  const notices=[...m.announcements||[]].reverse();
+
+  // 읽음 처리
+  let hasUnread=notices.some(n=>!n.read);
+  if(hasUnread){
+    (m.announcements||[]).forEach(n=>n.read=true);
+    sb.from('academy_members').update({announcements:m.announcements}).eq('id',m.id);
+    // 탭 뱃지 제거
+    $('stab-notice').textContent='📢 공지';
+  }
+
+  el.innerHTML=`<div style="padding:16px">
+    <div class="card">
+      <div class="section-header">
+        <div class="card-title" style="margin:0">📢 공지</div>
+        ${notices.length?`<span style="font-size:12px;color:var(--text2);font-weight:700">총 ${notices.length}개</span>`:''}
+      </div>
+      ${notices.length?notices.map(n=>`<div class="item-row" style="${!n.read?'background:var(--accent-light);margin:-1px;padding:11px 4px;border-radius:var(--r-sm)':''}">
+        <div class="item-meta">
+          <span class="badge b-orange">${!n.read?'🆕 새공지':'공지'}</span>
+          <span class="item-date">${n.date}</span>
+        </div>
+        <div class="item-text">${n.content}</div>
+      </div>`).join(''):'<div class="empty-state" style="padding:24px">아직 공지가 없어요</div>'}
+    </div>
+  </div>`;
 }
 
 function renderStudentView(){
@@ -1365,6 +1413,123 @@ async function submitMyQuestion(){
   $('my-q-text').value='';
   await sb.from('academy_members').update({questions:myMember.questions}).eq('id',myMember.id);
   renderStudentQ();renderStudentStats();toast('질문을 보냈어요!');
+}
+
+// ── MESSAGES ─────────────────────────────────────────────────
+async function loadMessages(){
+  const {data}=await sb.from('messages').select('*').eq('academy_id',academy.id).order('created_at',{ascending:false}).limit(50);
+  msgHistory=data||[];
+}
+
+function renderMessages(){
+  const el=$('page-messages');if(!el)return;
+  const approved=members.filter(m=>m.status==='approved');
+  el.innerHTML=`<div style="padding:16px">
+    <div class="card">
+      <div class="card-title">📢 단체 공지 보내기</div>
+      <div class="fg">
+        <label class="fl">대상</label>
+        <select id="msg-target">
+          <option value="all">전체 학생 (${approved.length}명)</option>
+          ${classes.map(c=>{
+            const cnt=classMemberships.filter(cm=>cm.class_id===c.id).length;
+            return '<option value="'+c.id+'">'+c.name+' ('+cnt+'명)</option>';
+          }).join('')}
+        </select>
+      </div>
+      <div class="fg">
+        <label class="fl">내용</label>
+        <textarea id="msg-content" placeholder="전달할 내용을 입력하세요..." style="min-height:90px"></textarea>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="sendMessage()">📨 보내기</button>
+    </div>
+    <div class="card">
+      <div class="card-title">📋 숙제 현황</div>
+      <div class="fg">
+        <label class="fl">숙제 선택</label>
+        <select id="hw-status-sel" onchange="renderHwStatus()">
+          <option value="">-- 숙제 선택 --</option>
+          ${(()=>{
+            const hwSet=new Map();
+            approved.forEach(m=>(m.homework||[]).forEach(h=>{
+              if(!hwSet.has(h.title))hwSet.set(h.title,h.due||'');
+            }));
+            return [...hwSet.entries()].map(([title,due])=>'<option value="'+title+'">'+title+(due?' (마감: '+due+')':'')+'</option>').join('');
+          })()}
+        </select>
+      </div>
+      <div id="hw-status-result"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">보낸 공지 기록</div>
+      ${msgHistory.length?msgHistory.map(m=>{
+        const targetName=m.target_class_id?classes.find(c=>c.id===m.target_class_id)?.name||'반':'전체';
+        return '<div class="item-row"><div class="item-meta"><span class="badge b-blue">'+targetName+'</span><span class="item-date">'+new Date(m.created_at).toLocaleDateString('ko-KR')+'</span></div><div class="item-text">'+m.content+'</div></div>';
+      }).join(''):'<div style="font-size:13px;color:var(--text2);padding:4px 0">보낸 공지가 없어요</div>'}
+    </div>
+  </div>`;
+  renderHwStatus();
+}
+
+function renderHwStatus(){
+  const el=$('hw-status-result');if(!el)return;
+  const title=$('hw-status-sel')?.value;
+  if(!title){el.innerHTML='';return}
+  const approved=members.filter(m=>m.status==='approved');
+  const done=[];const notDone=[];
+  approved.forEach(m=>{
+    const hw=(m.homework||[]).find(h=>h.title===title);
+    if(hw&&hw.done)done.push(m);
+    else notDone.push(m);
+  });
+  const rate=approved.length?Math.round(done.length/approved.length*100):0;
+  el.innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+      <div style="background:var(--green-bg);border:2px solid #9FE1CB;border-radius:var(--r-sm);padding:12px">
+        <div style="font-size:13px;font-weight:700;color:var(--green);margin-bottom:8px">✅ 완료 ${done.length}명</div>
+        ${done.map(m=>`<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.05)">
+          <div style="width:30px;height:30px;border-radius:50%;background:#E8F7EE;color:var(--green);border:1.5px solid #9FE1CB;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${(m.name||'?').slice(0,2)}</div>
+          <span style="font-size:13px;font-weight:700">${m.name||m.email}</span>
+        </div>`).join('')||'<div style="font-size:12px;color:var(--text2)">없음</div>'}
+      </div>
+      <div style="background:var(--red-bg);border:2px solid #F7C1C1;border-radius:var(--r-sm);padding:12px">
+        <div style="font-size:13px;font-weight:700;color:var(--red);margin-bottom:8px">⬜ 미완료 ${notDone.length}명</div>
+        ${notDone.map(m=>`<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.05)">
+          <div style="width:30px;height:30px;border-radius:50%;background:var(--red-bg);color:var(--red);border:1.5px solid #F7C1C1;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0">${(m.name||'?').slice(0,2)}</div>
+          <span style="font-size:13px;font-weight:700">${m.name||m.email}</span>
+        </div>`).join('')||'<div style="font-size:12px;color:var(--text2)">없음</div>'}
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:8px;font-size:12px;font-weight:700;color:var(--text2)">
+      완료율 <span style="color:${rate>=80?'var(--green)':rate>=50?'var(--amber)':'var(--red)'};font-size:16px">${rate}%</span>
+      <span style="margin-left:6px">(${done.length}/${approved.length}명)</span>
+    </div>`;
+}
+
+async function sendMessage(){
+  const content=$('msg-content')?.value.trim();
+  if(!content){toast('내용을 입력하세요');return}
+  const targetVal=$('msg-target')?.value;
+  const targetClassId=targetVal==='all'?null:targetVal;
+  const {data,error}=await sb.from('messages').insert({
+    academy_id:academy.id,sender_id:user.id,
+    content,target_class_id:targetClassId
+  }).select().single();
+  if(error){toast('오류: '+error.message);return}
+  const approved=members.filter(m=>m.status==='approved');
+  const targets=targetClassId
+    ?approved.filter(m=>classMemberships.some(cm=>cm.member_id===m.id&&cm.class_id===targetClassId))
+    :approved;
+  for(const m of targets){
+    if(!m.announcements)m.announcements=[];
+    m.announcements.push({id:data.id,content,date:new Date().toLocaleDateString('ko-KR'),read:false});
+    await sb.from('academy_members').update({announcements:m.announcements}).eq('id',m.id);
+  }
+  $('msg-content').value='';
+  msgHistory.unshift(data);
+  const targetName=targetClassId?classes.find(c=>c.id===targetClassId)?.name:'전체';
+  toast(`${targetName} ${targets.length}명에게 공지를 보냈어요!`);
+  renderMessages();
 }
 
 // ── ALERTS ───────────────────────────────────────────────────
